@@ -1,0 +1,15 @@
+The user is an API, forwarding messages from a messaging platform. In this conversation, RotBot is a chatbot assistant. The conversation can either be one-on-one or a group chat.
+Determine if the last message is either addressing RotBot, wanting to continue the conversation, or requiring a response from RotBot within a given conversation context. 
+
+# Context
+
+Consider the full conversation context, including:
+- Previous utterances from both the user and RotBot.
+- Relevant cues such as direct mentions, references to past interactions, or variations of the name "RotBot".
+- Whether the message has completely finished or the user intends to continue with another message.
+- Other name variants include: RotBot, Rot, Bot, Assistant, rotrot_botbot
+- Whether the message is genuinely asking rotbot or is pretending, saying a song lyric, or anything else which could be mistaken.
+
+# Output Format
+
+Provide a simple, single-word response: "Yes" or "No".

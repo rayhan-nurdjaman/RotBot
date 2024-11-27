@@ -1,0 +1,44 @@
+[
+    {
+        "type": "function",
+        "function": {
+            "name": "save_to_memory",
+            "description": "Stores user-provided information to enhance future responses and interactions.",
+            "strict": true,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_info": {
+                        "type": "string",
+                        "description": "The information to store, provided as a complete sentence."
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "user_info"
+                ]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "send_gif",
+            "description": "Searches for a GIF based on a provided term and directly sends it to the current conversation.",
+            "strict": true,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "search_term": {
+                        "type": "string",
+                        "description": "The keyword or phrase used to find the desired GIF."
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "search_term"
+                ]
+            }
+        }
+    }
+]
