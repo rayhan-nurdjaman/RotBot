@@ -21,12 +21,18 @@ class Client:
 		self.enable_always_on = {}
 		self.WPM = 400
 		self.function_call_limit = 99
-		with (
-			open('aura_balances.json', 'r') as balances_file
-		):
-			self.tenor = tenor.Tenor(token=os.getenv('GOOGLE_API_KEY'))
-			raw_aura_balances = balances_file.read()
-			self.aura_balances = json.loads(raw_aura_balances) if raw_aura_balances else {}
+		self.tenor = tenor.Tenor(token=os.getenv('GOOGLE_API_KEY'))
+		if not os.path.exists('data'):
+			os.makedirs('data')
+		try:
+			with open('data/aura_balances.json', 'r') as balances_file:
+				raw_aura_balances = balances_file.read()
+				self.aura_balances = json.loads(raw_aura_balances) if raw_aura_balances else {}
+		except FileNotFoundError:
+			with open('data/aura_balances.json', 'w') as balances_file:
+				balances_file.write(json.dumps({}))
+				self.aura_balances = {}
+
 		print('Client object initialized.\n')
 
 	def register_handlers(self):

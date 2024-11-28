@@ -4,6 +4,7 @@ import openai
 import json
 import io
 import base64
+import os
 
 class Assistant:
 	def __init__(self, api_key, model='gpt-4o-mini'):
@@ -17,19 +18,28 @@ class Assistant:
 			open('system_prompt.txt') as system_prompt_file, 
 			open('always_on_prompt.txt') as always_on_prompt_file, 
 			open('tools.json') as tools_file, 
-			open('memory.json') as memory_file,
 			open('brain_rot.json') as brain_rot_file
 		):
 			self.raw_system_prompt = system_prompt_file.read()
-			self.always_on_system_prompt = [
+			self.always_on_prompt = [
 				{
 					'role': 'system', 
 					'content': always_on_prompt_file.read()
 				},
 			]
 			self.tools = json.loads(tools_file.read())
-			self.memory = json.loads(memory_file.read())
 			self.brain_rot_terms = brain_rot_file.read()
+
+		if not os.path.exists('data'):
+			os.makedirs('data')
+		try:
+			with open('data/memory.json', 'r') as memory_file:
+				raw_memory = memory_file.read()
+				self.memory = json.loads(raw_memory) if raw_memory else {}
+		except FileNotFoundError:
+			with open('data/memory.json', 'w') as memory_file:
+				memory_file.write(json.dumps({}))
+				self.memory = {}
 		print('Assistant object initialized.\n')
 
 	async def get_response(self, chat_id):
@@ -120,7 +130,7 @@ class Assistant:
 		# TODO: Add memory to system prompt here
 		completion = self.client.chat.completions.create(
 			model=self.model,
-			messages=self.always_on_system_prompt+self.context_window[chat_id]+query # TODO add memory here
+			messages=self.always_on_prompt+self.context_window[chat_id]+query # TODO add memory here
 		)
 
 		answer = completion.choices[0].message.content.strip().lower()
