@@ -140,7 +140,7 @@ class Assistant:
 		return answer == 'yes'
 
 	def dump(self):
-		with open('memory.json', 'w') as file:
+		with open('data/memory.json', 'w') as file:
 			file.write(json.dumps(self.memory, indent=4))
 
 	# Assistant tools

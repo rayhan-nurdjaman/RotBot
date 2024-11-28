@@ -41,6 +41,7 @@ class Client:
 		self.application.add_handler(telegram.ext.CommandHandler('stfu', self.toggle_always_on))
 		self.application.add_handler(telegram.ext.CommandHandler('coinflip', self.coinflip))
 		self.application.add_handler(telegram.ext.CommandHandler('aura', self.aura))
+		self.application.add_handler(telegram.ext.CommandHandler('leaderboard', self.leaderboard))
 		self.application.add_handler(telegram.ext.MessageHandler(telegram.ext.filters.ALL, self.on_message))
 
 	async def on_message(self, update, context):
@@ -146,7 +147,7 @@ class Client:
 		self.assistant.add_tool_message(chat_id, tool_call, tool_output)
 
 	def dump(self) -> None:
-		with open('aura_balances.json', 'w') as file:
+		with open('data/aura_balances.json', 'w') as file:
 			file.write(json.dumps(self.aura_balances, indent=4))
 
 	# Client Tools
@@ -212,3 +213,42 @@ class Client:
 	async def aura(self, update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
 		user_id = str(update.message.from_user.id)
 		await update.message.reply_text(f'You currently have {self.get_balance(user_id)} Aura.')
+
+	async def leaderboard(self, update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
+		chat = update.message.chat
+		chat_id = chat.id
+		leaderboard_dict = {}
+
+		# Populate the leaderboard dictionary with usernames or fallback to first names
+		for user_id in self.aura_balances:
+			try:
+				chat_member = await context.bot.get_chat_member(chat_id=chat_id, user_id=int(user_id))
+				username = chat_member.user.username or chat_member.user.first_name  # Use username if available, else first name
+				leaderboard_dict[username] = self.aura_balances[user_id]
+			except Exception as e:
+				# Handle potential errors (e.g., user is no longer in the chat)
+				continue
+
+		# Sort the leaderboard dictionary by balance values (descending)
+		sorted_leaderboard = sorted(leaderboard_dict.items(), key=lambda item: item[1], reverse=True)
+
+		# Format the leaderboard as a numbered list without using enumerate
+		leaderboard_string = ""
+		rank = 1
+		for username, balance in sorted_leaderboard:
+			leaderboard_string += f"{rank}. {username}: {balance}\n"
+			rank += 1
+
+		# Add a title or header to the leaderboard message
+		if leaderboard_string:
+			leaderboard_message = f"{leaderboard_string}"
+		else:
+			leaderboard_message = "No data available for the leaderboard."
+
+		# Send the leaderboard message
+		await update.message.reply_text(
+			leaderboard_message,
+			parse_mode=telegram.constants.ParseMode.MARKDOWN,
+		)
+
+
