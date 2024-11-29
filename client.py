@@ -166,7 +166,7 @@ class Client:
 		rolls = [1, 2, 3, 4, 5, 6]
 		rolled = random.choice(rolls)
 		self.add_to_balance(user_id, rolled * 100)
-		await context.bot.send_video_note(chat_id=update.message.chat_id, video_note=open(f'{rolled}.mp4', 'rb'))
+		await context.bot.send_video_note(chat_id=update.message.chat_id, video_note=open(f'dicerolls/{rolled}.mp4', 'rb'))
 		message = '💀'*rolled
 		if update.message.reply_to_message:
 			await update.message.reply_to_message.reply_text(message)
@@ -248,7 +248,7 @@ class Client:
 		# Send the leaderboard message
 		await update.message.reply_text(
 			leaderboard_message,
-			parse_mode=telegram.constants.ParseMode.MARKDOWN,
 		)
 
-
+	async def lockin(self, update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
+		pass

@@ -5,6 +5,11 @@ import json
 import io
 import base64
 import os
+from enum import Enum
+
+# TODO: 
+# Brain rot mode : RotBot as it is
+# Brain nourishment : gpt-4o full, low temperature, even more limited context
 
 class Assistant:
 	def __init__(self, api_key, model='gpt-4o-mini'):
@@ -15,10 +20,10 @@ class Assistant:
 		self.memory = {}
 		self.tools = []
 		with (
-			open('system_prompt.txt') as system_prompt_file, 
-			open('always_on_prompt.txt') as always_on_prompt_file, 
-			open('tools.json') as tools_file, 
-			open('brain_rot.json') as brain_rot_file
+			open('config/system_prompt.txt') as system_prompt_file, 
+			open('config/always_on_prompt.txt') as always_on_prompt_file, 
+			open('config/tools.json') as tools_file, 
+			open('config/brain_rot.json') as brain_rot_file
 		):
 			self.raw_system_prompt = system_prompt_file.read()
 			self.always_on_prompt = [
@@ -160,7 +165,7 @@ class Assistant:
 		last_chat = self.context_window[chat_id][0]
 		if last_chat['role'] == 'tool':
 			# Remove both tool_calls and tool 
-			chat_history[chat_id] = chat_history[chat_id][1:]
+			self.context_window[chat_id] = self.context_window[chat_id][1:]
 
 	async def encode_image(self, data):
 		encoded_image = base64.b64encode(data).decode('utf-8')
