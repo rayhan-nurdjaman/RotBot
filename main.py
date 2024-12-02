@@ -4,7 +4,7 @@ import json
 from assistant import Assistant
 from client import Client
 import os
-
+import asyncio
 # logging.basicConfig(
 #     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 # )
@@ -14,14 +14,14 @@ import os
 
 # logger = logging.getLogger(__name__)
 
-def main():
+async def main():
     # with open("api_keys.json") as file:
     #     api_keys = json.load(file)
 
     assistant = Assistant(api_key=os.getenv('OPENAI_API_KEY'))
     client = Client(token=os.getenv('TELEGRAM_API_KEY'), assistant=assistant)
 
-    client.run()
+    await client.run()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

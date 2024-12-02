@@ -85,8 +85,20 @@ class Client:
 			self.assistant.add_assistant_message(chat_id, response) # Finish reason == 'stop'
 			await self._send_message(update, context, response)
 
-	def run(self):
-		self.application.run_polling(allowed_updates=telegram.Update.ALL_TYPES)
+	async def run(self):
+		await self.application.initialize()
+		await self.application.updater.start_polling()
+		await self.application.start()
+		try:
+			# Your custom event loop or logic
+			while True:
+				await asyncio.sleep(1)  # Replace with your own logic
+		except KeyboardInterrupt:
+			print("Shutting down...")
+		await application.updater.stop()
+		await application.stop()
+		await application.shutdown()
+		# self.application.run_polling(allowed_updates=telegram.Update.ALL_TYPES)
 
 	# Helper functions
 	def add_to_balance(self, user_id, amount):
