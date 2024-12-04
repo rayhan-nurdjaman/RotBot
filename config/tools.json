@@ -40,5 +40,39 @@
                 ]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_time",
+            "description": "Returns the time in YYYY-MM-DD HH:MM:SS format.",
+            "strict": true,
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "Searches the web from the provided search term and returns a summary of the first page.",
+            "strict": true,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "search_term": {
+                        "type": "string",
+                        "description": "The keyword or phrase used to search the web."
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "search_term"
+                ]
+            }
+        }
     }
 ]

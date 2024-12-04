@@ -144,10 +144,6 @@ class Assistant:
 
 		return answer == 'yes'
 
-	def dump(self):
-		with open('data/memory.json', 'w') as file:
-			file.write(json.dumps(self.memory, indent=4))
-
 	# Assistant tools
 	def add_to_memory(self, content, chat_id):
 		if not chat_id in self.memory:
@@ -170,6 +166,29 @@ class Assistant:
 	async def encode_image(self, data):
 		encoded_image = base64.b64encode(data).decode('utf-8')
 		return f'data:image/jpeg;base64,{encoded_image}'
+
+	def dump(self):
+		with open('data/memory.json', 'w') as file:
+			file.write(json.dumps(self.memory, indent=4))
+
+	def summarise(self, content, focus=None):
+		# TODO: Create abstraction response class
+		query = []
+		if focus:
+			pass
+		else:
+			query = [
+				{
+					'role' : 'user',
+					'content' : f'Summarise the following text. {content}'
+				},
+			]
+
+		completion = self.client.chat.completions.create(
+			model=self.model,
+			messages=query
+		)
+		return completion.choices[0].message.content
 
 	def get_system_prompt(self, chat_id):
 		processed_system_prompt = self.raw_system_prompt

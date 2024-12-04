@@ -9,19 +9,28 @@ import json
 import random
 import io
 
-import tenor
+import gif_fetcher
 import assistant
 import os
+import requests
+from bs4 import BeautifulSoup
+
+from datetime import datetime
 
 class Client:
-	def __init__(self, token, assistant):
+	def __init__(self, token, assistant, gif_fetcher):
+		# Internal things
 		self.application = telegram.ext.Application.builder().token(token).build()
 		self.assistant = assistant
-		self.register_handlers()
-		self.enable_always_on = {}
+		self.gif_fetcher = gif_fetcher
+		# Bot propertires
 		self.WPM = 400
 		self.function_call_limit = 99
-		self.tenor = tenor.Tenor(token=os.getenv('GOOGLE_API_KEY'))
+		self.update_rate = 1 # Times per second
+		# Initialize data
+		self.enable_always_on = {}
+		self.reminders = {}
+		# User data
 		if not os.path.exists('data'):
 			os.makedirs('data')
 		try:
@@ -32,17 +41,8 @@ class Client:
 			with open('data/aura_balances.json', 'w') as balances_file:
 				balances_file.write(json.dumps({}))
 				self.aura_balances = {}
-
+		self.register_handlers()
 		print('Client object initialized.\n')
-
-	def register_handlers(self):
-		self.application.add_handler(telegram.ext.CommandHandler('rollhumor', self.roll_for_humor))
-		self.application.add_handler(telegram.ext.CommandHandler('penis', self.penis))
-		self.application.add_handler(telegram.ext.CommandHandler('stfu', self.toggle_always_on))
-		self.application.add_handler(telegram.ext.CommandHandler('coinflip', self.coinflip))
-		self.application.add_handler(telegram.ext.CommandHandler('aura', self.aura))
-		self.application.add_handler(telegram.ext.CommandHandler('leaderboard', self.leaderboard))
-		self.application.add_handler(telegram.ext.MessageHandler(telegram.ext.filters.ALL, self.on_message))
 
 	async def on_message(self, update, context):
 		chat_id = str(update.message.chat.id)
@@ -92,15 +92,23 @@ class Client:
 		try:
 			# Your custom event loop or logic
 			while True:
-				await asyncio.sleep(1)  # Replace with your own logic
+				await asyncio.sleep(1.0 / self.update_rate)  # Replace with your own logic
 		except KeyboardInterrupt:
 			print("Shutting down...")
 		await application.updater.stop()
 		await application.stop()
 		await application.shutdown()
-		# self.application.run_polling(allowed_updates=telegram.Update.ALL_TYPES)
 
 	# Helper functions
+	def register_handlers(self):
+		self.application.add_handler(telegram.ext.CommandHandler('rollhumor', self.roll_for_humor))
+		self.application.add_handler(telegram.ext.CommandHandler('penis', self.penis))
+		self.application.add_handler(telegram.ext.CommandHandler('stfu', self.toggle_always_on))
+		self.application.add_handler(telegram.ext.CommandHandler('coinflip', self.coinflip))
+		self.application.add_handler(telegram.ext.CommandHandler('aura', self.aura))
+		self.application.add_handler(telegram.ext.CommandHandler('leaderboard', self.leaderboard))
+		self.application.add_handler(telegram.ext.MessageHandler(telegram.ext.filters.ALL, self.on_message))
+
 	def add_to_balance(self, user_id, amount):
 		if not user_id in self.aura_balances:
 			self.aura_balances[user_id] = 0
@@ -154,7 +162,11 @@ class Client:
 			tool_output = self.assistant.add_to_memory(tool_arguments.get('user_info'), chat_id)
 			await update.message.set_reaction(telegram.constants.ReactionEmoji.WRITING_HAND)
 		elif tool_name == 'send_gif':
-			tool_output = await self.send_tenor_gif(update, context, tool_arguments.get('search_term'))
+			tool_output = await self.send_gif(update, context, tool_arguments.get('search_term'))
+		elif tool_name == 'get_time':
+			tool_output	= self.get_time()
+		elif tool_name == 'web_search':
+			tool_output	= self.web_search(tool_arguments.get('search_term'))
 
 		self.assistant.add_tool_message(chat_id, tool_call, tool_output)
 
@@ -163,14 +175,40 @@ class Client:
 			file.write(json.dumps(self.aura_balances, indent=4))
 
 	# Client Tools
-	async def send_tenor_gif(self, update, context, search_term):
+	async def send_gif(self, update, context, search_term):
+		# TODO: move out send animation from here and just make this a get url function
 		print(f'RotBot tried searching for {search_term} on Tenor.\n')
-		url = self.tenor.random(search_term)
+		url = self.gif_fetcher.random(search_term)
 		await context.bot.send_animation(chat_id=update.message.chat_id, animation=url)
 		return {
 			'search_term' : search_term,
 			'state' : 'Sent GIF successfully.'
 		}
+
+	def get_time(self):
+		now = datetime.now()
+		datetime_with_real_time = datetime.combine(now.date(), now.time())
+		return {
+			'time' : str(datetime_with_real_time)
+		}	
+
+	def web_search(self, search_term):
+		params = {
+			'key': os.getenv('GOOGLE_API_KEY'),
+			'cx': os.getenv('GOOGLE_SEARCH_ENGINE_ID'),
+			'q': search_term
+		}
+		search_results = requests.get("https://customsearch.googleapis.com/customsearch/v1", params=params).json()
+		data = ''
+		# TODO: Iterate over every site because this 3 is arbitrary
+		for i in range(3):
+			item = search_results['items'][i]
+			print(item['title'])
+			response = requests.get(item['link'])
+			html_content = response.text
+			soup = BeautifulSoup(html_content, 'html.parser')
+			data += soup.get_text()
+		return self.assistant.summarise(data)
 
 	# Commands
 	async def roll_for_humor(self, update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
@@ -261,6 +299,6 @@ class Client:
 		await update.message.reply_text(
 			leaderboard_message,
 		)
-
+	
 	async def lockin(self, update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
 		pass

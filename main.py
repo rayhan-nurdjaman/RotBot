@@ -1,25 +1,18 @@
-# from logging_config import logger
-
-import json
-from assistant import Assistant
-from client import Client
 import os
 import asyncio
-# logging.basicConfig(
-#     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-# )
+import json
+from dotenv import load_dotenv
 
-# # set higher logging level for httpx to avoid all GET and POST requests being logged
-# logging.getLogger("httpx").setLevel(logging.WARNING)
-
-# logger = logging.getLogger(__name__)
+from assistant import Assistant
+from client import Client
+from gif_fetcher import GifFetcher
 
 async def main():
-    # with open("api_keys.json") as file:
-    #     api_keys = json.load(file)
+    load_dotenv()
 
+    gif_fetcher = GifFetcher(token=os.getenv('GOOGLE_API_KEY'))
     assistant = Assistant(api_key=os.getenv('OPENAI_API_KEY'))
-    client = Client(token=os.getenv('TELEGRAM_API_KEY'), assistant=assistant)
+    client = Client(token=os.getenv('TELEGRAM_API_KEY'), assistant=assistant, gif_fetcher=gif_fetcher)
 
     await client.run()
 
