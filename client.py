@@ -8,25 +8,26 @@ import asyncio
 import json
 import random
 import io
+import os
 
 import gif_fetcher
+import search_engine
 import assistant
-import os
-import requests
-from bs4 import BeautifulSoup
 
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 class Client:
-	def __init__(self, token, assistant, gif_fetcher):
+	def __init__(self, token, assistant, gif_fetcher, search_engine):
 		# Internal things
 		self.application = telegram.ext.Application.builder().token(token).build()
 		self.assistant = assistant
 		self.gif_fetcher = gif_fetcher
+		self.search_engine = search_engine
 		# Bot propertires
 		self.WPM = 400
 		self.function_call_limit = 99
 		self.update_rate = 1 # Times per second
+		self.zone_offset = 8 # Singapore
 		# Initialize data
 		self.enable_always_on = {}
 		self.reminders = {}
@@ -85,14 +86,17 @@ class Client:
 			self.assistant.add_assistant_message(chat_id, response) # Finish reason == 'stop'
 			await self._send_message(update, context, response)
 
+	async def poll(self):
+		await self._handle_reminders()
+
 	async def run(self):
 		await self.application.initialize()
 		await self.application.updater.start_polling()
 		await self.application.start()
 		try:
-			# Your custom event loop or logic
 			while True:
-				await asyncio.sleep(1.0 / self.update_rate)  # Replace with your own logic
+				await self.poll()
+				await asyncio.sleep(1.0 / self.update_rate)
 		except KeyboardInterrupt:
 			print("Shutting down...")
 		await application.updater.stop()
@@ -124,6 +128,19 @@ class Client:
 		if not chat_id in self.enable_always_on:
 			self.enable_always_on[chat_id] = False
 		return self.enable_always_on[chat_id]
+
+	async def _handle_reminders(self):
+		now = datetime.now(timezone.utc)
+		current_unix_time = int(now.timestamp())
+		for chat_id in self.reminders:
+			for i in range(len(self.reminders[chat_id]) - 1, -1, -1):
+				reminder = self.reminders[chat_id][i]
+				if reminder['unix_time'] < current_unix_time:
+					system_prompt = f'The reminder \'{reminder['description']}\' is up. Please remind accordingly. Notify the user by tagging their username (e.g., @username).'
+					self.assistant.add_system_message(chat_id, system_prompt)
+					response = await self.assistant.get_response(chat_id)
+					self.reminders[chat_id].pop(i)
+					await self.application.bot.send_message(chat_id=chat_id, text=response.message.content)
 
 	async def _send_message(self, update, context, response):
 		chat_bubbles = response.message.content.splitlines()
@@ -166,7 +183,27 @@ class Client:
 		elif tool_name == 'get_time':
 			tool_output	= self.get_time()
 		elif tool_name == 'web_search':
+			await context.bot.send_message(chat_id=update.message.chat_id, text=f'Googling \'{tool_arguments.get('search_term')}\'...')
 			tool_output	= self.web_search(tool_arguments.get('search_term'))
+		elif tool_name == 'set_reminder':
+			dt = datetime(
+				int(tool_arguments.get('year')),
+				int(tool_arguments.get('month')),
+				int(tool_arguments.get('day')),
+				int(tool_arguments.get('hour')),
+				int(tool_arguments.get('minute')),
+				int(tool_arguments.get('second'))
+			)
+
+			utc_offset = timezone(timedelta(hours=self.zone_offset))  # Define UTC+8 timezone
+			dt = dt.replace(tzinfo=utc_offset)  # Set the timezone to UTC+8
+			dt_utc = dt.astimezone(timezone.utc)
+
+			datetime_with_real_time = datetime.combine(dt_utc.date(), dt_utc.time())
+			print(str(datetime_with_real_time), tool_arguments.get('description'))
+			
+			unix_time = int(dt_utc.timestamp())
+			tool_output = self.set_reminder(chat_id, unix_time, tool_arguments.get('description'))
 
 		self.assistant.add_tool_message(chat_id, tool_call, tool_output)
 
@@ -186,29 +223,32 @@ class Client:
 		}
 
 	def get_time(self):
-		now = datetime.now()
-		datetime_with_real_time = datetime.combine(now.date(), now.time())
+		now = datetime.now(timezone.utc)
+		offset_time = now + timedelta(hours=self.zone_offset)
+
+		day_name = offset_time.strftime("%A")
+		datetime_with_real_time = datetime.combine(offset_time.date(), offset_time.time())
+
 		return {
-			'time' : str(datetime_with_real_time)
+			'time' : str(datetime_with_real_time),
+			'day' : day_name
 		}	
 
 	def web_search(self, search_term):
-		params = {
-			'key': os.getenv('GOOGLE_API_KEY'),
-			'cx': os.getenv('GOOGLE_SEARCH_ENGINE_ID'),
-			'q': search_term
-		}
-		search_results = requests.get("https://customsearch.googleapis.com/customsearch/v1", params=params).json()
-		data = ''
-		# TODO: Iterate over every site because this 3 is arbitrary
-		for i in range(3):
-			item = search_results['items'][i]
-			print(item['title'])
-			response = requests.get(item['link'])
-			html_content = response.text
-			soup = BeautifulSoup(html_content, 'html.parser')
-			data += soup.get_text()
-		return self.assistant.summarise(data)
+		raw_dumps = self.search_engine.search(search_term)
+		raw_data = ' '.join(raw_dumps.values())
+		return self.assistant.summarise(raw_data)
+
+	def set_reminder(self, chat_id, unix_time, description):
+		if not chat_id in self.reminders:
+			self.reminders[chat_id] = []
+		self.reminders[chat_id].append(
+			{
+				'unix_time' : unix_time,
+				'description' : description
+			}
+		)
+		return 'Reminder successfully created'
 
 	# Commands
 	async def roll_for_humor(self, update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:

@@ -74,5 +74,56 @@
                 ]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_reminder",
+            "description": "Sets a reminder on the specified year, month, day, hour, minute, and second.",
+            "strict": true,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "description": {
+                        "type": "string",
+                        "description": "A brief explanation of the purpose or content of the reminder. Make sure to include the username of the requester."
+                    },
+                    "year": {
+                        "type": "number",
+                        "description": "The year for the reminder"
+                    },
+                    "month": {
+                        "type": "number",
+                        "description": "The month for the reminder (1-12)"
+                    },
+                    "day": {
+                        "type": "number",
+                        "description": "The day of the month for the reminder (1-31)"
+                    },
+                    "hour": {
+                        "type": "number",
+                        "description": "The hour for the reminder (0-23)"
+                    },
+                    "minute": {
+                        "type": "number",
+                        "description": "The minute for the reminder (0-59)"
+                    },
+                    "second": {
+                        "type": "number",
+                        "description": "The second for the reminder (0-59)"
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "description",
+                    "year",
+                    "month",
+                    "day",
+                    "hour",
+                    "minute",
+                    "second"
+                ]
+            }
+        }
     }
 ]

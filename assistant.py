@@ -99,6 +99,15 @@ class Assistant:
 		)
 		print('> RotBot: ', ' '.join(self.context_window[chat_id][-1]['content'].splitlines()), '\n')
 
+	def add_system_message(self, chat_id, text):
+		self.context_window[chat_id].append(
+			{
+				'role': 'system',
+				'content': text,
+			}
+		)
+		print('> System: ', ' '.join(self.context_window[chat_id][-1]['content'].splitlines()), '\n')
+
 	def add_tool_message(self, chat_id, tool_call, tool_output):
 		print(f'{tool_call.function.name} tool usage saved in context!', '\n')
 		self.context_window[chat_id].append(
@@ -147,7 +156,7 @@ class Assistant:
 	# Assistant tools
 	def add_to_memory(self, content, chat_id):
 		if not chat_id in self.memory:
-			self.memory[chat_id] = {}
+			self.memory[chat_id] = []
 		self.memory[chat_id].append(content)
 		self.dump()
 		return {
