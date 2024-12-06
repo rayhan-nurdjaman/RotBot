@@ -15,7 +15,7 @@ from enum import Enum
 class Assistant:
 	def __init__(self, api_key, model='gpt-4o-mini'):
 		# TODO: Change this to AsyncOpenAI
-		self.client = openai.OpenAI(api_key=api_key)
+		self.client = openai.AsyncOpenAI(api_key=api_key)
 		self.model = model
 		self.context_window = {}
 		self.context_window_max = 16
@@ -51,7 +51,7 @@ class Assistant:
 
 	async def get_response(self, chat_id):
 		# TODO: Create abstraction response class
-		response = self.client.chat.completions.create(
+		response = await self.client.chat.completions.create(
 			model=self.model,
 			messages=self.get_system_prompt(chat_id)+self.context_window[chat_id],
 			tools=self.tools,
@@ -136,7 +136,7 @@ class Assistant:
 			}
 		)
 
-	def is_user_addressing(self, chat_id):
+	async def is_user_addressing(self, chat_id):
 		query = [
 			{
 				'role' : 'user',
@@ -145,7 +145,7 @@ class Assistant:
 		]
 
 		# TODO: Add memory to system prompt here
-		completion = self.client.chat.completions.create(
+		completion = await self.client.chat.completions.create(
 			model=self.model,
 			messages=self.always_on_prompt+self.context_window[chat_id]+query # TODO add memory here
 		)
@@ -160,12 +160,16 @@ class Assistant:
 		encoded_image = base64.b64encode(data).decode('utf-8')
 		return f'data:image/jpeg;base64,{encoded_image}'
 
-	def summarize(self, content, focus=None):
-		print("summarizing")
+	async def summarize(self, content, focus=None):
 		# TODO: Create abstraction response class
 		query = []
 		if focus:
-			pass
+			query = [
+				{
+					'role' : 'user',
+					'content' : f'Summarize the following text, with a special focus on the topic: \'{focus}\'. Include key details about {focus} prominently in your summary, while briefly mentioning other relevant details.'
+				},
+			]
 		else:
 			query = [
 				{
@@ -174,7 +178,7 @@ class Assistant:
 				},
 			]
 
-		completion = self.client.chat.completions.create(
+		completion = await self.client.chat.completions.create(
 			model=self.model,
 			messages=query
 		)

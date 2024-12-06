@@ -63,7 +63,6 @@ class Client:
 			await application.shutdown()
 
 	async def on_message(self, update, context):
-
 		chat_id = str(update.message.chat.id)
 		message_id = str(update.message.message_id)
 		username = update.message.from_user.username
@@ -89,7 +88,7 @@ class Client:
 		if user_message or photo_url:
 			entry = f'{username}: ' + reply_prefix + user_message
 			self.assistant.add_user_message(chat_id, entry, photo_url)
-			if self.can_talk(chat_id) and self.assistant.is_user_addressing(chat_id):
+			if self.can_talk(chat_id) and await self.assistant.is_user_addressing(chat_id):
 				await self.respond(chat_id, message_id=message_id)
 
 	async def poll(self):
@@ -252,7 +251,9 @@ class Client:
 		async def process_link(link):
 			print(f'Searching {link}\n')
 			raw_text = await self.search_engine.get_text(link)
-			summary = self.assistant.summarize(raw_text)
+			print(f'Finished searching {link}, summarizing\n')
+			summary = await self.assistant.summarize(raw_text)
+			print(f'Finished summarizing {link}\n{summary}\n')
 			return link, summary
 
 		# Limit the number of links to `top` and process them concurrently
