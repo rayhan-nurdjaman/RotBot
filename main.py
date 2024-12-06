@@ -5,13 +5,13 @@ from dotenv import load_dotenv
 
 from assistant import Assistant
 from client import Client
-from gif_fetcher import GifFetcher
+from gif_fetcher import GIFFetcher
 from search_engine import SearchEngine
 
 async def main():
     load_dotenv()
 
-    gif_fetcher = GifFetcher(
+    gif_fetcher = GIFFetcher(
         token=os.getenv('GOOGLE_API_KEY')
     )
 

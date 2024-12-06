@@ -5,6 +5,7 @@ import json
 import io
 import base64
 import os
+import asyncio
 from enum import Enum
 
 # TODO: 
@@ -13,6 +14,7 @@ from enum import Enum
 
 class Assistant:
 	def __init__(self, api_key, model='gpt-4o-mini'):
+		# TODO: Change this to AsyncOpenAI
 		self.client = openai.OpenAI(api_key=api_key)
 		self.model = model
 		self.context_window = {}
@@ -52,7 +54,8 @@ class Assistant:
 		response = self.client.chat.completions.create(
 			model=self.model,
 			messages=self.get_system_prompt(chat_id)+self.context_window[chat_id],
-			tools=self.tools
+			tools=self.tools,
+			parallel_tool_calls=False
 		)
 		return response.choices[0]
 
@@ -153,6 +156,30 @@ class Assistant:
 
 		return answer == 'yes'
 
+	async def encode_image(self, data):
+		encoded_image = base64.b64encode(data).decode('utf-8')
+		return f'data:image/jpeg;base64,{encoded_image}'
+
+	def summarize(self, content, focus=None):
+		print("summarizing")
+		# TODO: Create abstraction response class
+		query = []
+		if focus:
+			pass
+		else:
+			query = [
+				{
+					'role' : 'user',
+					'content' : f'Summarize the following text. {content}'
+				},
+			]
+
+		completion = self.client.chat.completions.create(
+			model=self.model,
+			messages=query
+		)
+		return completion.choices[0].message.content
+
 	# Assistant tools
 	def add_to_memory(self, content, chat_id):
 		if not chat_id in self.memory:
@@ -164,40 +191,18 @@ class Assistant:
 			'state' : 'Information successfully saved.'
 		}
 
-	# Helper functions
+	# Private function
 	def _limit_context_window(self, chat_id):
 		self.context_window[chat_id] = self.context_window[chat_id][-self.context_window_max:]
 		last_chat = self.context_window[chat_id][0]
 		if last_chat['role'] == 'tool':
 			# Remove both tool_calls and tool 
 			self.context_window[chat_id] = self.context_window[chat_id][1:]
-
-	async def encode_image(self, data):
-		encoded_image = base64.b64encode(data).decode('utf-8')
-		return f'data:image/jpeg;base64,{encoded_image}'
-
+	
+	# Helper functions
 	def dump(self):
 		with open('data/memory.json', 'w') as file:
 			file.write(json.dumps(self.memory, indent=4))
-
-	def summarise(self, content, focus=None):
-		# TODO: Create abstraction response class
-		query = []
-		if focus:
-			pass
-		else:
-			query = [
-				{
-					'role' : 'user',
-					'content' : f'Summarise the following text. {content}'
-				},
-			]
-
-		completion = self.client.chat.completions.create(
-			model=self.model,
-			messages=query
-		)
-		return completion.choices[0].message.content
 
 	def get_system_prompt(self, chat_id):
 		processed_system_prompt = self.raw_system_prompt

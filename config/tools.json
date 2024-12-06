@@ -45,7 +45,7 @@
         "type": "function",
         "function": {
             "name": "get_time",
-            "description": "Returns the time in YYYY-MM-DD HH:MM:SS format.",
+            "description": "The ONLY source of reliable time. Returns the time in YYYY-MM-DD HH:MM:SS format.",
             "strict": true,
             "parameters": {
                 "type": "object",

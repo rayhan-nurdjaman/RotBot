@@ -1,23 +1,8 @@
-import functools
 import requests
 import json
 import random
-from urllib.parse import urlencode
 
-# class TenorImage(object):
-#     def __init__(self, data=None):
-#         if data:
-#             self.created = data.get('created')
-#             self.url = data.get('url')
-#             self.tags = data.get('tags')
-#             self.type = data.get('tupe')
-#             self.dims = ""
-#             self.preview = ""
-#             self.size = ""
-#             self.duration = ""
-
-
-class GifFetcher(object):
+class GIFFetcher(object):
     def __init__(self, token):
         self.api_key = token
 
@@ -26,8 +11,6 @@ class GifFetcher(object):
         params['client_key'] = 'RotBot'
         params['limit'] = 8
         response = requests.get('https://tenor.googleapis.com/v2/search', params=params)
-    #     response = requests.get(
-    # "https://tenor.googleapis.com/v2/search?q=%s&key=%s&client_key=%s&limit=%s" % (params["tag"], self.api_key, "RotBot",  8))
         results = json.loads(response.text)
         return results
 

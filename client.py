@@ -25,8 +25,7 @@ class Client:
 		self.search_engine = search_engine
 		# Bot propertires
 		self.WPM = 400
-		self.function_call_limit = 99
-		self.update_rate = 1 # Times per second
+		self.poll_rate = 1 # Times per second
 		self.zone_offset = 8 # Singapore
 		# Initialize data
 		self.enable_always_on = {}
@@ -42,11 +41,31 @@ class Client:
 			with open('data/aura_balances.json', 'w') as balances_file:
 				balances_file.write(json.dumps({}))
 				self.aura_balances = {}
-		self.register_handlers()
+		self._register_handlers()
 		print('Client object initialized.\n')
 
+	async def run(self):
+		await self.application.initialize()
+		await self.application.updater.start_polling(drop_pending_updates=True)
+		await self.application.start()
+		try:
+			while True:
+				await self.poll()
+				await asyncio.sleep(1.0 / self.poll_rate)
+		except KeyboardInterrupt:
+			print("Shutting down.\n")
+			await application.updater.stop()
+			await application.stop()
+			await application.shutdown()
+		else:
+			await application.updater.stop()
+			await application.stop()
+			await application.shutdown()
+
 	async def on_message(self, update, context):
+
 		chat_id = str(update.message.chat.id)
+		message_id = str(update.message.message_id)
 		username = update.message.from_user.username
 		user_message = ''
 		photo_url = await self._handle_image(update, context) if update.message.photo else None
@@ -70,48 +89,42 @@ class Client:
 		if user_message or photo_url:
 			entry = f'{username}: ' + reply_prefix + user_message
 			self.assistant.add_user_message(chat_id, entry, photo_url)
-
-		if (user_message or photo_url) and self.can_talk(chat_id) and self.assistant.is_user_addressing(chat_id):
-			response = await self.assistant.get_response(chat_id)
-
-			n = 1
-			# Model tried calling a tool
-			while response.finish_reason != 'stop' and n < self.function_call_limit:
-				# Properly handle tool calls here
-				await self._handle_tool_call(update, context, response)
-				# Have the assistant regenerate response after calling a function
-				response = await self.assistant.get_response(chat_id)
-				n += 1
-
-			self.assistant.add_assistant_message(chat_id, response) # Finish reason == 'stop'
-			await self._send_message(update, context, response)
+			if self.can_talk(chat_id) and self.assistant.is_user_addressing(chat_id):
+				await self.respond(chat_id, message_id=message_id)
 
 	async def poll(self):
 		await self._handle_reminders()
 
-	async def run(self):
-		await self.application.initialize()
-		await self.application.updater.start_polling()
-		await self.application.start()
-		try:
-			while True:
-				await self.poll()
-				await asyncio.sleep(1.0 / self.update_rate)
-		except KeyboardInterrupt:
-			print("Shutting down...")
-		await application.updater.stop()
-		await application.stop()
-		await application.shutdown()
-
 	# Helper functions
-	def register_handlers(self):
-		self.application.add_handler(telegram.ext.CommandHandler('rollhumor', self.roll_for_humor))
-		self.application.add_handler(telegram.ext.CommandHandler('penis', self.penis))
-		self.application.add_handler(telegram.ext.CommandHandler('stfu', self.toggle_always_on))
-		self.application.add_handler(telegram.ext.CommandHandler('coinflip', self.coinflip))
-		self.application.add_handler(telegram.ext.CommandHandler('aura', self.aura))
-		self.application.add_handler(telegram.ext.CommandHandler('leaderboard', self.leaderboard))
-		self.application.add_handler(telegram.ext.MessageHandler(telegram.ext.filters.ALL, self.on_message))
+	async def respond(self, chat_id, message_id=None): # Make sure to already add the prompt before hand
+		# Initial response
+		response = await self.assistant.get_response(chat_id)
+
+		# Model tried calling a tool
+		while response.finish_reason != 'stop':
+			# Properly handle tool calls here
+			await self._handle_tool_call(response, chat_id, message_id=message_id)
+			# Have the assistant regenerate response after calling a function
+			response = await self.assistant.get_response(chat_id)
+
+		self.assistant.add_assistant_message(chat_id, response) # Finish reason == 'stop'
+
+		chat_bubbles = response.message.content.splitlines()
+
+		for i in range(len(chat_bubbles)):
+			bubble = chat_bubbles[i]
+			if bubble and not bubble.isspace():
+				await self.application.bot.send_chat_action(chat_id=int(chat_id), action=telegram.constants.ChatAction.TYPING)
+				if i == 0 and message_id:
+					await self.application.bot.send_message(
+						chat_id=int(chat_id),
+						text=bubble,
+						reply_to_message_id=message_id
+					)
+					await asyncio.sleep(0.2)
+				else:
+					await asyncio.sleep(min(len(bubble)/5 / (self.WPM/60), 5.0))
+					await self.application.bot.send_message(chat_id=int(chat_id), text=bubble)
 
 	def add_to_balance(self, user_id, amount):
 		if not user_id in self.aura_balances:
@@ -129,33 +142,20 @@ class Client:
 			self.enable_always_on[chat_id] = False
 		return self.enable_always_on[chat_id]
 
-	async def _handle_reminders(self):
-		now = datetime.now(timezone.utc)
-		current_unix_time = int(now.timestamp())
-		for chat_id in self.reminders:
-			for i in range(len(self.reminders[chat_id]) - 1, -1, -1):
-				reminder = self.reminders[chat_id][i]
-				if reminder['unix_time'] < current_unix_time:
-					system_prompt = f'The reminder \'{reminder['description']}\' is up. Please remind accordingly. Notify the user by tagging their username (e.g., @username).'
-					self.assistant.add_system_message(chat_id, system_prompt)
-					response = await self.assistant.get_response(chat_id)
-					self.reminders[chat_id].pop(i)
-					await self.application.bot.send_message(chat_id=chat_id, text=response.message.content)
+	def dump(self) -> None:
+		with open('data/aura_balances.json', 'w') as file:
+			file.write(json.dumps(self.aura_balances, indent=4))
 
-	async def _send_message(self, update, context, response):
-		chat_bubbles = response.message.content.splitlines()
-
-		for i in range(len(chat_bubbles)):
-			bubble = chat_bubbles[i]
-			if bubble and not bubble.isspace():
-				await context.bot.send_chat_action(chat_id=update.message.chat_id, action=telegram.constants.ChatAction.TYPING)
-				if i == 0:
-					await update.message.reply_text(bubble)
-				else:
-					await asyncio.sleep(min(len(bubble)/5 / (self.WPM/60), 5.0))
-					await context.bot.send_message(chat_id=update.message.chat_id, text=bubble)
-				await asyncio.sleep(0.2)
-
+	# Private functions
+	def _register_handlers(self):
+		self.application.add_handler(telegram.ext.CommandHandler('rollhumor', self.roll_for_humor))
+		self.application.add_handler(telegram.ext.CommandHandler('penis', self.penis))
+		self.application.add_handler(telegram.ext.CommandHandler('stfu', self.toggle_always_on))
+		self.application.add_handler(telegram.ext.CommandHandler('coinflip', self.coinflip))
+		self.application.add_handler(telegram.ext.CommandHandler('aura', self.aura))
+		self.application.add_handler(telegram.ext.CommandHandler('leaderboard', self.leaderboard))
+		self.application.add_handler(telegram.ext.MessageHandler(telegram.ext.filters.ALL, self.on_message))
+	
 	async def _handle_image(self, update, context):
 		file = await context.bot.get_file(update.message.photo[-1].file_id)
 
@@ -166,9 +166,7 @@ class Client:
 
 		return await self.assistant.encode_image(data)
 
-	async def _handle_tool_call(self, update, context, response):
-		chat_id = str(update.message.chat.id)
-
+	async def _handle_tool_call(self, response, chat_id, message_id=None):
 		tool_call = response.message.tool_calls[0]
 		tool_name = tool_call.function.name
 		tool_arguments = json.loads(tool_call.function.arguments)
@@ -177,22 +175,24 @@ class Client:
 
 		if tool_name == 'save_to_memory':
 			tool_output = self.assistant.add_to_memory(tool_arguments.get('user_info'), chat_id)
-			await update.message.set_reaction(telegram.constants.ReactionEmoji.WRITING_HAND)
+			if message_id:
+				await self.application.bot.set_message_reaction(telegram.constants.ReactionEmoji.WRITING_HAND)
 		elif tool_name == 'send_gif':
-			tool_output = await self.send_gif(update, context, tool_arguments.get('search_term'))
+			tool_output = await self.send_gif(chat_id, tool_arguments.get('search_term'))
 		elif tool_name == 'get_time':
 			tool_output	= self.get_time()
 		elif tool_name == 'web_search':
-			await context.bot.send_message(chat_id=update.message.chat_id, text=f'Googling \'{tool_arguments.get('search_term')}\'...')
-			tool_output	= self.web_search(tool_arguments.get('search_term'))
+			await self.application.bot.send_message(chat_id=chat_id, text=f'Googling \'{tool_arguments.get('search_term')}\'...')
+			tool_output	= await self.web_search(tool_arguments.get('search_term'))
 		elif tool_name == 'set_reminder':
+			# Sanitize input
 			dt = datetime(
 				int(tool_arguments.get('year')),
-				int(tool_arguments.get('month')),
-				int(tool_arguments.get('day')),
-				int(tool_arguments.get('hour')),
-				int(tool_arguments.get('minute')),
-				int(tool_arguments.get('second'))
+				min(int(tool_arguments.get('month')), 12),
+				min(int(tool_arguments.get('day')), 31),
+				min(int(tool_arguments.get('hour')), 23),
+				min(int(tool_arguments.get('minute')), 59),
+				min(int(tool_arguments.get('second')), 59)
 			)
 
 			utc_offset = timezone(timedelta(hours=self.zone_offset))  # Define UTC+8 timezone
@@ -207,16 +207,26 @@ class Client:
 
 		self.assistant.add_tool_message(chat_id, tool_call, tool_output)
 
-	def dump(self) -> None:
-		with open('data/aura_balances.json', 'w') as file:
-			file.write(json.dumps(self.aura_balances, indent=4))
+	async def _handle_reminders(self):
+		# Get current utc unix time 
+		now = datetime.now(timezone.utc)
+		current_unix_time = int(now.timestamp())
+		# Seperated per chat conversation
+		for chat_id in self.reminders:
+			for i in range(len(self.reminders[chat_id]) - 1, -1, -1):
+				reminder = self.reminders[chat_id][i]
+				if reminder['unix_time'] < current_unix_time:
+					system_prompt = f'The reminder \'{reminder['description']}\' is up. Please remind accordingly. Notify the user by tagging their username.'
+					self.assistant.add_system_message(chat_id, system_prompt)
+					self.reminders[chat_id].pop(i)
+					await self.respond(chat_id)
 
 	# Client Tools
-	async def send_gif(self, update, context, search_term):
-		# TODO: move out send animation from here and just make this a get url function
+	async def send_gif(self, chat_id, search_term):
+		chat_id = int(chat_id)
 		print(f'RotBot tried searching for {search_term} on Tenor.\n')
 		url = self.gif_fetcher.random(search_term)
-		await context.bot.send_animation(chat_id=update.message.chat_id, animation=url)
+		await self.application.bot.send_animation(chat_id=chat_id, animation=url)
 		return {
 			'search_term' : search_term,
 			'state' : 'Sent GIF successfully.'
@@ -234,10 +244,26 @@ class Client:
 			'day' : day_name
 		}	
 
-	def web_search(self, search_term):
-		raw_dumps = self.search_engine.search(search_term)
-		raw_data = ' '.join(raw_dumps.values())
-		return self.assistant.summarise(raw_data)
+	async def web_search(self, search_term):
+		top = 5
+		links = self.search_engine.search(search_term)
+		summaries = {}
+
+		async def process_link(link):
+			print(f'Searching {link}\n')
+			raw_text = await self.search_engine.get_text(link)
+			summary = self.assistant.summarize(raw_text)
+			return link, summary
+
+		# Limit the number of links to `top` and process them concurrently
+		tasks = [process_link(link) for link in links[:top]]
+		results = await asyncio.gather(*tasks)
+
+		# Collect results into the summaries dictionary
+		for link, summary in results:
+			summaries[link] = summary
+
+		return summaries
 
 	def set_reminder(self, chat_id, unix_time, description):
 		if not chat_id in self.reminders:
