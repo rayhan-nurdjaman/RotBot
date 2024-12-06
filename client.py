@@ -120,7 +120,6 @@ class Client:
 						text=bubble,
 						reply_to_message_id=message_id
 					)
-					await asyncio.sleep(0.2)
 				else:
 					await asyncio.sleep(min(len(bubble)/5 / (self.WPM/60), 5.0))
 					await self.application.bot.send_message(chat_id=int(chat_id), text=bubble)
@@ -184,25 +183,16 @@ class Client:
 			await self.application.bot.send_message(chat_id=chat_id, text=f'Googling \'{tool_arguments.get('search_term')}\'...')
 			tool_output	= await self.web_search(tool_arguments.get('search_term'))
 		elif tool_name == 'set_reminder':
-			# Sanitize input
-			dt = datetime(
+			tool_output = self.set_reminder(
+				chat_id,
+				tool_arguments.get('description'),
 				int(tool_arguments.get('year')),
-				min(int(tool_arguments.get('month')), 12),
-				min(int(tool_arguments.get('day')), 31),
-				min(int(tool_arguments.get('hour')), 23),
-				min(int(tool_arguments.get('minute')), 59),
-				min(int(tool_arguments.get('second')), 59)
+				int(tool_arguments.get('month')),
+				int(tool_arguments.get('day')),
+				int(tool_arguments.get('hour')),
+				int(tool_arguments.get('minute')),
+				int(tool_arguments.get('second'))
 			)
-
-			utc_offset = timezone(timedelta(hours=self.zone_offset))  # Define UTC+8 timezone
-			dt = dt.replace(tzinfo=utc_offset)  # Set the timezone to UTC+8
-			dt_utc = dt.astimezone(timezone.utc)
-
-			datetime_with_real_time = datetime.combine(dt_utc.date(), dt_utc.time())
-			print(str(datetime_with_real_time), tool_arguments.get('description'))
-			
-			unix_time = int(dt_utc.timestamp())
-			tool_output = self.set_reminder(chat_id, unix_time, tool_arguments.get('description'))
 
 		self.assistant.add_tool_message(chat_id, tool_call, tool_output)
 
@@ -266,16 +256,46 @@ class Client:
 
 		return summaries
 
-	def set_reminder(self, chat_id, unix_time, description):
-		if not chat_id in self.reminders:
-			self.reminders[chat_id] = []
-		self.reminders[chat_id].append(
-			{
-				'unix_time' : unix_time,
-				'description' : description
+	def set_reminder(self, chat_id, description, year, month, day, hour, minute, second):
+		try:
+			# Sanitize input
+			dt = datetime(
+				year,
+				month,
+				day,
+				hour,
+				minute,
+				second
+			)
+		except:
+			return {
+				'state' : 'Failed creating reminder because of invalid parameters.'
 			}
-		)
-		return 'Reminder successfully created'
+		else:
+			utc_offset = timezone(timedelta(hours=self.zone_offset))  # Define UTC+8 timezone
+			dt = dt.replace(tzinfo=utc_offset)  # Set the timezone to UTC+8
+			dt_utc = dt.astimezone(timezone.utc)
+			now_utc = datetime.now(timezone.utc)
+			delta = dt_utc - now_utc
+
+			datetime_with_real_time = datetime.combine(dt_utc.date(), dt_utc.time())
+			print(str(datetime_with_real_time), tool_arguments.get('description'))
+		
+			unix_time = int(dt_utc.timestamp())
+
+			if not chat_id in self.reminders:
+				self.reminders[chat_id] = []
+			self.reminders[chat_id].append(
+				{
+					'unix_time' : unix_time,
+					'description' : description
+				}
+			)
+			return {
+				'state' : f'Reminder \'{description}\' successfully created',
+				'when' : str(dt),
+				'time_to_reminder' : str(delta)
+			}
 
 	# Commands
 	async def roll_for_humor(self, update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
