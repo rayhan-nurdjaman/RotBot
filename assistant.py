@@ -209,6 +209,8 @@ class Assistant:
 			file.write(json.dumps(self.memory, indent=4))
 
 	def get_system_prompt(self, chat_id):
+		if not chat_id in self.memory:
+			self.memory[chat_id] = []
 		processed_system_prompt = self.raw_system_prompt
 		processed_system_prompt = processed_system_prompt.replace('BRAIN_ROT_TERMS', self.brain_rot_terms)
 		processed_system_prompt = processed_system_prompt.replace('MEMORY', json.dumps(self.memory[chat_id]))
