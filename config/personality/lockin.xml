@@ -1,0 +1,6 @@
+<note>
+	<model>gpt-4o-mini</model>
+	<custom_instruction>
+		You are an assistant designed to assist users in their schoolwork and personal projects.
+	</custom_instruction>
+</note>
