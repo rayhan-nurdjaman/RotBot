@@ -1,5 +1,7 @@
 <note>
 	<model>gpt-4o-mini</model>
+	<temp>0.7</temp>
+	<context_length>16</context_length>
 	<custom_instruction>
 		You are an assistant designed to assist users in their schoolwork and personal projects.
 	</custom_instruction>

@@ -17,17 +17,17 @@ from assistant import Assistant, Personality
 class Client:
 	def __init__(self, token, assistant, gif_fetcher, search_engine, casino, time_manager):
 		# Internal things
-		self.application = telegram.ext.Application.builder().token(token).build()
-		self.assistant = assistant
-		self.gif_fetcher = gif_fetcher
-		self.search_engine = search_engine
-		self.casino = casino
-		self.time_manager = time_manager
+		self.application 		= telegram.ext.Application.builder().token(token).build()
+		self.assistant 			= assistant
+		self.gif_fetcher 		= gif_fetcher
+		self.search_engine 		= search_engine
+		self.casino 			= casino
+		self.time_manager 		= time_manager
 		# Bot propertires
-		self.WPM = 400
-		self.poll_rate = 1 # Times per second
+		self.WPM 				= 400
+		self.poll_rate 			= 1 # Times per second
 		# Initialize data
-		self.enable_always_on = {}
+		self.enable_always_on 	= {}
 		# User data
 		self._register_handlers()
 		print('Client object initialized.\n')
@@ -59,12 +59,14 @@ class Client:
 		message_id = str(update.message.message_id)
 		username = update.message.from_user.username
 		user_message = ''
+		# TODO: Have image handling done by assistant.py, pass by IOBytes object
 		photo_url = await self._handle_image(update, context) if update.message.photo else None
 
 		reply_prefix = ''
 		reply = update.message.reply_to_message
 
 		# Setup reply prefix to add context
+		# TODO: in topics, this is somehow always valid, causing reply.text to be always None
 		if reply:
 			if update.message.photo:
 				reply_prefix += f'*replying to \'{reply.caption}\' by {reply.from_user.username}* '
@@ -78,9 +80,11 @@ class Client:
 			user_message = f'{update.message.caption}'
 
 		if user_message or photo_url:
+			# TODO: Assistant sometimes does not recognize the usernames and gets mixed up. 
+			# May need to format in a common format?
 			entry = f'{username}: ' + reply_prefix + user_message
 			self.assistant.add_user_message(chat_id, entry, photo_url)
-			# disable user addresing if assistant is in one to one convo
+			# TODO: disable checks if assistant is in a one-to-one convo
 			if self._can_talk(chat_id) and await self._should_talk(chat_id):
 				await self._respond(chat_id, message_id=message_id)
 
@@ -90,6 +94,7 @@ class Client:
 		await self._respond(chat_id)
 
 	# Commands
+	# TODO: create decorator (?), add these things to context so the bot can see
 	async def aura(self, update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
 		user_id = str(update.message.from_user.id)
 		await update.message.reply_text(f'You currently have {self.casino.get_balance(user_id)} Aura.')
@@ -98,7 +103,6 @@ class Client:
 		user_id = str(update.message.from_user.id)
 		value = random.randint(0, 12)
 		self.casino.modify_balance(user_id, value * 50)
-		# self.add_to_balance(user_id, value * 50)
 		await update.message.reply_text(f'8{'='*value}D')
 
 	async def schizo(self, update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
@@ -123,7 +127,6 @@ class Client:
 		else:
 			user_id = str(update.message.from_user.id)
 			if wager <= self.casino.get_balance(user_id):
-				# outcome = 'heads' if random.randint(0, 1) else 'tails'
 				outcome = outcomes[random.randint(0, 1)]
 				if guess == outcome:
 					# Won
@@ -142,11 +145,11 @@ class Client:
 		chat_id = chat.id
 		leaderboard_dict = {}
 
-		# Populate the leaderboard dictionary with usernames or fallback to first names
 		for user_id in self.casino.aura_balances:
 			try:
+				# TODO: chat_id here is somehow redundant, even in different group chats it will return the user
 				chat_member = await context.bot.get_chat_member(chat_id=chat_id, user_id=int(user_id))
-				username = chat_member.user.username or chat_member.user.first_name  # Use username if available, else first name
+				username = chat_member.user.username or chat_member.user.first_name
 				leaderboard_dict[username] = self.casino.aura_balances[user_id]
 			except Exception as e:
 				# Handle potential errors (e.g., user is no longer in the chat)
@@ -155,7 +158,7 @@ class Client:
 		# Sort the leaderboard dictionary by balance values (descending)
 		sorted_leaderboard = sorted(leaderboard_dict.items(), key=lambda item: item[1], reverse=True)
 
-		# Format the leaderboard as a numbered list without using enumerate
+		# TODO: This is a bit much to put under one function, ideally split into a rank formatter or something
 		leaderboard_string = ""
 		rank = 1
 		for username, balance in sorted_leaderboard:
@@ -175,10 +178,12 @@ class Client:
 	
 	async def roll_for_humor(self, update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
 		user_id = str(update.message.from_user.id)
+		# TODO: Change this to file names
 		rolls = [1, 2, 3, 4, 5, 6]
 		rolled = random.choice(rolls)
 		self.casino.modify_balance(user_id, rolled * 100)
 		await context.bot.send_video_note(chat_id=update.message.chat_id, video_note=open(f'dicerolls/{rolled}.mp4', 'rb'))
+		# TODO: A bit cursed having an emoji here
 		message = '💀'*rolled
 		if update.message.reply_to_message:
 			await update.message.reply_to_message.reply_text(message)
@@ -193,15 +198,20 @@ class Client:
 		await update.message.reply_text(f'Always on is now {'Enabled' if self.enable_always_on[chat_id] else 'Disabled'}')
 
 	# Client Tools
+	# TODO: tbh could dissolve most of these and leave the rest as private functions
 	def get_time(self):
 		return self.time_manager.get_time()
 
+	# TODO: Description criteria not strict. Assistant sometimes mistakes one reminder for someone else.
+	# TODO: This feels a bit redundant
 	def set_reminder(self, chat_id, description, year, month, day, hour, minute, second):
 		self.time_manager.add_reminder(chat_id, description, year, month, day, hour, minute, second)
 
 	async def send_gif(self, chat_id, search_term):
 		chat_id = int(chat_id)
+		# TODO: Do logging
 		print(f'RotBot tried searching for {search_term} on Tenor.\n')
+		# TODO: Implement async search
 		url = self.gif_fetcher.random(search_term)
 		await self.application.bot.send_animation(chat_id=chat_id, animation=url)
 		return {
@@ -210,7 +220,9 @@ class Client:
 		}
 
 	async def web_search(self, search_term):
+		# TODO: Maybe have the Assistant define top?
 		top = 5
+		# TODO: Do async here
 		links = self.search_engine.search(search_term)
 		summaries = {}
 
@@ -222,9 +234,6 @@ class Client:
 				summary = await self.assistant.summarize(raw_text)
 				print(f'Finished summarizing {link}\n{summary}\n')
 				return link, summary
-			# except aiohttp.ClientError as e:
-			# 	print(f'Failed to fetch {link}: {e}')
-			# 	return link, 'Failed to get website'
 			except Exception as e:
 				print(f'An unexpected error occurred while processing {link}: {e}')
 				return link, 'Failed to get website'
@@ -278,6 +287,7 @@ class Client:
 			parse_mode=telegram.constants.ParseMode.MARKDOWN
 		)
 
+		# TODO: Make a send bubbles function to make interactions more natural
 		# chat_bubbles = response.message.content.splitlines()
 
 		# for i in range(len(chat_bubbles)):
@@ -300,6 +310,7 @@ class Client:
 	async def _handle_image(self, update, context):
 		file = await context.bot.get_file(update.message.photo[-1].file_id)
 
+		# TODO: Allocate this to Assistant.py, pass as IOObject thing
 		out_buffer = io.BytesIO()
 		await file.download_to_memory(out_buffer)
 		out_buffer.seek(0)

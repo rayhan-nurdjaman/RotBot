@@ -1,5 +1,3 @@
-# from logging_config import logger
-
 import openai
 import json
 import io
@@ -10,9 +8,6 @@ from enum import Enum
 import xml.etree.ElementTree as ET
 from PIL import Image
 
-# TODO: 
-# Brain rot mode : RotBot as it is
-# Brain nourishment : gpt-4o full, low temperature, even more limited context
 class Personality(Enum):
 	BASE = 0
 	ROTBOT = 1
@@ -74,6 +69,8 @@ class AssistantInstance:
 	def get_context(self):
 		return self.get_system_prompt()+self.context_window
 
+	# Unsure whether to put this here or in the assistant class, as the name will always be RotBot
+	# Most likely need to revert back to there
 	def get_always_on_prompt(self):
 		return [
 			{
@@ -82,6 +79,7 @@ class AssistantInstance:
 			},
 		]
 
+	# TODO: Improve reliability, maybe incorporate CoT?
 	def get_always_on_context(self):
 		query = [
 			{
@@ -106,6 +104,8 @@ class Assistant:
 		# TODO: Create abstraction response class
 		instance = self._get_instance(chat_id)
 
+		# TODO: Somehow implement streaming without integrating too hard with client.py
+		# TODO: Error handling here
 		response = await self.client.chat.completions.create(
 			model=instance.model,
 			messages=instance.get_context(),
@@ -115,11 +115,7 @@ class Assistant:
 		)
 		return response.choices[0]
 
-	# Ideally rewrite these to setget methods on AssistantInstance
 	def add_user_message(self, chat_id, text, image_url=None):
-		# if not chat_id in self.context_window:
-		# 	self.context_window[chat_id] = []
-		# instance = self.instances[chat_id]
 		instance = self._get_instance(chat_id)
 
 		user_chat = {
@@ -146,38 +142,46 @@ class Assistant:
 				}
 			)
 
-		# self.context_window[chat_id].append(user_chat)
+		# TODO: Add a set method for the context window?
 		instance.context_window.append(user_chat)
 
+		# TODO: Do logging
 		print('>', instance.context_window[-1]['content'][0]['text'], '\n')
 
+		# TODO: move this to the set method on the instance
 		self._limit_context_window(chat_id)
 
 	def add_assistant_message(self, chat_id, text):
 		instance = self._get_instance(chat_id)
 
+		# TODO: Add a set method for the context window?
 		instance.context_window.append(
 			{
 				'role': 'assistant',
 				'content': text,
 			}
 		)
+		# TODO: Do logging
 		print('> RotBot: ', ' '.join(instance.context_window[-1]['content'].splitlines()), '\n')
 
 	def add_system_message(self, chat_id, text):
 		instance = self._get_instance(chat_id)
 
+		# TODO: Add a set method for the context window?
 		instance.context_window.append(
 			{
 				'role': 'system',
 				'content': text,
 			}
 		)
+		# TODO: Do logging
 		print('> System: ', ' '.join(instance.context_window[-1]['content'].splitlines()), '\n')
 
 	def add_tool_message(self, chat_id, tool_call, tool_output):
 		instance = self._get_instance(chat_id)
+		# TODO: Do logging
 		print(f'{tool_call.function.name} tool usage saved in context!', '\n')
+		# TODO: Add a set method for the context window?
 		instance.context_window.append(
 			{
 				'role': 'assistant',
@@ -193,6 +197,7 @@ class Assistant:
 				]
 			}
 		)
+		# TODO: Add a set method for the context window?
 		instance.context_window.append(
 			{
 				'role' : 'tool',
@@ -201,10 +206,12 @@ class Assistant:
 			}
 		)# Change params here to accomodate multiple backends
 
+	# TODO: Probably want to add user specified personalities? So most likely change from enums to strings
 	def set_instance_personality(self, chat_id, personality):
-		instance = self._get_instance(chat_id)	
+		instance = self._get_instance(chat_id)
 		instance.set_personality(personality)
 
+	# TODO: Improve reliability
 	async def is_user_addressing(self, chat_id):
 		instance = self._get_instance(chat_id)
 
@@ -219,6 +226,7 @@ class Assistant:
 
 		return answer == 'yes'
 
+	# TODO: Resize images here to reduce network use
 	async def encode_image(self, data):
 		encoded_image = base64.b64encode(data).decode('utf-8')
 		return f'data:image/jpeg;base64,{encoded_image}'
