@@ -7,7 +7,7 @@ from assistant import Assistant
 from client import Client
 from gif_fetcher import GIFFetcher
 from search_engine import SearchEngine
-from reminder_manager import ReminderManager
+from time_manager import TimeManager
 from casino import Casino
 
 async def main():
@@ -22,7 +22,7 @@ async def main():
         search_engine_id=os.getenv('GOOGLE_SEARCH_ENGINE_ID')
     )
 
-    reminder_manager = ReminderManager()
+    time_manager = TimeManager()
 
     casino = Casino()
 
@@ -35,7 +35,8 @@ async def main():
         assistant=assistant, 
         gif_fetcher=gif_fetcher,
         search_engine=search_engine,
-        casino=casino
+        casino=casino,
+        time_manager=time_manager
     )
 
     await client.run()

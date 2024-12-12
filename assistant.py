@@ -40,7 +40,6 @@ class AssistantInstance:
 		self.model = root.find('model').text
 		self.system_prompt = root.find('system_prompt').text
 		self.always_on_prompt = root.find('always_on_prompt').text
-		print(self.always_on_prompt)
 
 	def set_personality(self, personality):
 		self.personality = personality
@@ -208,8 +207,6 @@ class Assistant:
 
 	async def is_user_addressing(self, chat_id):
 		instance = self._get_instance(chat_id)
-
-		print(instance.model, instance.get_always_on_context())
 
 		completion = await self.client.chat.completions.create(
 			model=instance.model,

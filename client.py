@@ -14,20 +14,18 @@ import gif_fetcher
 import search_engine
 from assistant import Assistant, Personality
 
-from datetime import datetime, timezone, timedelta
-
 class Client:
-	def __init__(self, token, assistant, gif_fetcher, search_engine, casino):
+	def __init__(self, token, assistant, gif_fetcher, search_engine, casino, time_manager):
 		# Internal things
 		self.application = telegram.ext.Application.builder().token(token).build()
 		self.assistant = assistant
 		self.gif_fetcher = gif_fetcher
 		self.search_engine = search_engine
 		self.casino = casino
+		self.time_manager = time_manager
 		# Bot propertires
 		self.WPM = 400
 		self.poll_rate = 1 # Times per second
-		self.zone_offset = 8 # Singapore
 		# Initialize data
 		self.enable_always_on = {}
 		# User data
@@ -54,8 +52,7 @@ class Client:
 			await application.shutdown()
 
 	async def poll(self):
-		pass
-		# await self._handle_reminders()
+		await self.time_manager.poll(self.on_reminder)
 
 	async def on_message(self, update, context):
 		chat_id = str(update.message.chat.id)
@@ -86,6 +83,11 @@ class Client:
 			# disable user addresing if assistant is in one to one convo
 			if self._can_talk(chat_id) and await self._should_talk(chat_id):
 				await self._respond(chat_id, message_id=message_id)
+
+	async def on_reminder(self, chat_id, reminder):
+		system_prompt = f'The reminder \'{reminder['description']}\' is up. Please remind accordingly. Notify the user by tagging their username.'
+		self.assistant.add_system_message(chat_id, system_prompt)
+		await self._respond(chat_id)
 
 	# Commands
 	async def aura(self, update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
@@ -192,51 +194,10 @@ class Client:
 
 	# Client Tools
 	def get_time(self):
-		now = datetime.now(timezone.utc)
-		offset_time = now + timedelta(hours=self.zone_offset)
-
-		day_name = offset_time.strftime("%A")
-		datetime_with_real_time = datetime.combine(offset_time.date(), offset_time.time())
-
-		return {
-			'time' : str(datetime_with_real_time),
-			'day' : day_name
-		}	
+		return self.time_manager.get_time()
 
 	def set_reminder(self, chat_id, description, year, month, day, hour, minute, second):
-		try:
-			# Sanitize input
-			dt = datetime(
-				year,
-				month,
-				day,
-				hour,
-				minute,
-				second
-			)
-		except:
-			return {
-				'state' : 'Failed creating reminder because of invalid parameters.'
-			}
-		else:
-			utc_offset = timezone(timedelta(hours=self.zone_offset))  # Define UTC+8 timezone
-			dt = dt.replace(tzinfo=utc_offset)  # Set the timezone to UTC+8
-			dt_utc = dt.astimezone(timezone.utc)
-			now_utc = datetime.now(timezone.utc)
-			delta = dt_utc - now_utc
-
-			datetime_with_real_time = datetime.combine(dt_utc.date(), dt_utc.time())
-			# print(str(datetime_with_real_time), tool_arguments.get('description'))
-		
-			unix_time = int(dt_utc.timestamp())
-
-			add_reminder()
-
-			return {
-				'state' : f'Reminder \'{description}\' successfully created',
-				'when' : str(dt),
-				'time_to_reminder' : str(delta)
-			}
+		self.time_manager.add_reminder(chat_id, description, year, month, day, hour, minute, second)
 
 	async def send_gif(self, chat_id, search_term):
 		chat_id = int(chat_id)
@@ -254,12 +215,19 @@ class Client:
 		summaries = {}
 
 		async def process_link(link):
-			print(f'Searching {link}\n')
-			raw_text = await self.search_engine.get_text(link)
-			print(f'Finished searching {link}, summarizing\n')
-			summary = await self.assistant.summarize(raw_text)
-			print(f'Finished summarizing {link}\n{summary}\n')
-			return link, summary
+			try:
+				print(f'Searching {link}\n')
+				raw_text = await self.search_engine.get_text(link)
+				print(f'Finished searching {link}, summarizing\n')
+				summary = await self.assistant.summarize(raw_text)
+				print(f'Finished summarizing {link}\n{summary}\n')
+				return link, summary
+			# except aiohttp.ClientError as e:
+			# 	print(f'Failed to fetch {link}: {e}')
+			# 	return link, 'Failed to get website'
+			except Exception as e:
+				print(f'An unexpected error occurred while processing {link}: {e}')
+				return link, 'Failed to get website'
 
 		# Limit the number of links to `top` and process them concurrently
 		tasks = [process_link(link) for link in links[:top]]
@@ -327,7 +295,7 @@ class Client:
 		# 			await self.application.bot.send_message(chat_id=int(chat_id), text=bubble)
 
 	async def _should_talk(self, chat_id):
-		await self.assistant.is_user_addressing(chat_id)
+		return await self.assistant.is_user_addressing(chat_id)
 
 	async def _handle_image(self, update, context):
 		file = await context.bot.get_file(update.message.photo[-1].file_id)
