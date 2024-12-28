@@ -1,6 +1,7 @@
 import random
 import os
 import json
+import sqlite3
 
 class Casino:
 	def __init__(self):
@@ -23,6 +24,11 @@ class Casino:
 			file.write(json.dumps(self.aura_balances, indent=4))
 
 	def _init_data(self):
+		# TODO: Change this to param in constructor
+		# con = sqlite3.connect("data/database.db")
+		# cur = con.cursor()
+		# cur.execute("CREATE TABLE movie(title, year, score)")
+		
 		if not os.path.exists('data'):
 			os.makedirs('data')
 		try:

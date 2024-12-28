@@ -111,9 +111,17 @@ class Client:
 		if key == 'rotbot':
 			self.assistant.set_instance_personality(chat_id, Personality.ROTBOT)
 			await update.message.reply_text(f'Succesfully swapped personality to \'{key}\'')
-		elif key == 'lockin':
-			self.assistant.set_instance_personality(chat_id, Personality.LOCKIN)
+		elif key == 'coder':
+			self.assistant.set_instance_personality(chat_id, Personality.CODER)
 			await update.message.reply_text(f'Succesfully swapped personality to \'{key}\'')
+		elif key == 'caveman':
+			self.assistant.set_instance_personality(chat_id, Personality.CAVEMAN)
+			await update.message.reply_text(f'Succesfully swapped personality to \'{key}\'')
+		elif key == 'british':
+			self.assistant.set_instance_personality(chat_id, Personality.BRITISH)
+			await update.message.reply_text(f'Succesfully swapped personality to \'{key}\'')
+		else:
+			await update.message.reply_text(f'The personality \'{key}\' does not exist.')
 
 	async def coinflip(self, update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
 		outcomes = ['heads', 'tails']

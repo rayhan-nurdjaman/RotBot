@@ -5,14 +5,14 @@ import base64
 import os
 import asyncio
 from enum import Enum
-import xml.etree.ElementTree as ET
 from PIL import Image
+from ruamel.yaml import YAML
 
 class Personality(Enum):
-	BASE = 0
-	ROTBOT = 1
-	LOCKIN = 2
-	WALLSTREET = 3
+	ROTBOT = 0
+	CODER = 1
+	CAVEMAN = 2
+	BRITISH = 3
 
 # Struct to manage each Assistant in a chat
 class AssistantInstance:
@@ -25,36 +25,36 @@ class AssistantInstance:
 		self.memory 			= []
 		self.context_window		= []
 		self.context_length		= 16
+		self.temperature		= 1.0
 		self.personality		= Personality.ROTBOT
 		self._load_config()
 		self.set_personality(self.personality)
 
 	def _load_config(self):
-		tree = ET.parse(f'./config/personality/base.xml')
-		root = tree.getroot()
-		self.model = root.find('model').text
-		self.system_prompt = root.find('system_prompt').text
-		self.always_on_prompt = root.find('always_on_prompt').text
+		with open('config/base.yaml') as stream:
+			yaml = YAML(typ='safe', pure=True)
+			root = yaml.load(stream)
+			self.model = root['model']
+			self.system_prompt = root['system_prompt']
+			self.temperature = root['temp']
+			self.context_length = root['context_length']
 
 	def set_personality(self, personality):
 		self.personality = personality
 		files = {
-			Personality.BASE : 'base.xml',
-			Personality.ROTBOT : 'rotbot.xml',
-			Personality.LOCKIN : 'lockin.xml',
-			Personality.WALLSTREET : 'rotbot.xml',
+			Personality.ROTBOT : 'personality/rotbot.yaml',
+			Personality.CODER : 'personality/coder.yaml',
+			Personality.CAVEMAN : 'personality/caveman.yaml',
+			Personality.BRITISH : 'personality/british.yaml',
 		}
-
-		# Personality to XML
 		file = files[personality]
-		tree = ET.parse(f'config/personality/{file}')
-		root = tree.getroot()
-
-		model = root.find('model')
-		custom_instruction = root.find('custom_instruction')
-
-		self.model = model.text
-		self.custom_instruction = custom_instruction.text
+		with open(f'config/{file}') as stream:
+			yaml = YAML(typ='safe', pure=True)
+			root = yaml.load(stream)
+			self.model = root['model']
+			self.custom_instruction = root['custom_instruction']
+			self.temperature = root['temp']
+			self.context_length = root['context_length']
 
 	def get_system_prompt(self):
 		processed_system_prompt = self.system_prompt
@@ -71,24 +71,30 @@ class AssistantInstance:
 
 	# Unsure whether to put this here or in the assistant class, as the name will always be RotBot
 	# Most likely need to revert back to there
-	def get_always_on_prompt(self):
-		return [
-			{
-				'role': 'system', 
-				'content': self.always_on_prompt
-			},
-		]
+	# def get_always_on_prompt(self):
+	# 	return [
+	# 		{
+	# 			'role': 'system', 
+	# 			'content': self.always_on_prompt
+	# 		},
+	# 	]
 
 	# TODO: Improve reliability, maybe incorporate CoT?
-	def get_always_on_context(self):
+	def get_always_on_context(self, prompt):
 		query = [
 			{
 				'role' : 'user',
 				'content' : 'Based on the context given, should RotBot, the assistant, respond?'
 			},
 		]
+		always_on_prompt = [
+			{
+				'role' : 'system',
+				'content' : prompt
+			},
+		]
 
-		return self.get_always_on_prompt()+self.context_window+query
+		return always_on_prompt+self.context_window+query
 
 class Assistant:
 	def __init__(self, api_key, model='gpt-4o-mini'):
@@ -111,7 +117,8 @@ class Assistant:
 			messages=instance.get_context(),
 			#stream=True
 			tools=self.tools,
-			parallel_tool_calls=False
+			parallel_tool_calls=False,
+			temperature=instance.temperature
 		)
 		return response.choices[0]
 
@@ -216,8 +223,8 @@ class Assistant:
 		instance = self._get_instance(chat_id)
 
 		completion = await self.client.chat.completions.create(
-			model=instance.model,
-			messages=instance.get_always_on_context() # TODO add memory here
+			model=self.always_on_model,
+			messages=instance.get_always_on_context(self.always_on_prompt) # TODO add memory here
 		)
 
 		answer = completion.choices[0].message.content.strip().lower()
@@ -294,17 +301,14 @@ class Assistant:
 			instance.context_window = instance.context_window[1:]
 	
 	def _load_config(self):
-		# Should probably move back the always on thing here
 		with (
-			# open('config/always_on_prompt.txt') as always_on_prompt_file, 
 			open('config/tools.json') as tools_file, 
+			open('config/always_on.yaml') as stream
 		):
-			# self.always_on_prompt = [
-			# 	{
-			# 		'role': 'system', 
-			# 		'content': always_on_prompt_file.read()
-			# 	},
-			# ]
+			yaml = YAML(typ='safe', pure=True)
+			root = yaml.load(stream)
+			self.always_on_prompt = root['always_on_prompt']
+			self.always_on_model = root['model']
 			self.tools = json.loads(tools_file.read())
 
 	def _init_data(self):
