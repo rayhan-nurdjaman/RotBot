@@ -66,20 +66,20 @@ class AssistantInstance:
 			},
 		]
 
+	def add_to_context(self, message):
+		self.context_window.append(message)
+		self.context_window = self.context_window[-self.context_length:]
+		last_chat = self.context_window[0]
+		if last_chat['role'] == 'tool':
+			# Remove both tool_calls and tool 
+			self.context_window = self.context_window[1:]
+
 	def get_context(self):
 		return self.get_system_prompt()+self.context_window
 
-	# Unsure whether to put this here or in the assistant class, as the name will always be RotBot
-	# Most likely need to revert back to there
-	# def get_always_on_prompt(self):
-	# 	return [
-	# 		{
-	# 			'role': 'system', 
-	# 			'content': self.always_on_prompt
-	# 		},
-	# 	]
-
-	# TODO: Improve reliability, maybe incorporate CoT?
+	# TODO: This setup takes a bit too long having to send 2 requests, and is also expensive
+	# Could have the Assistant create a go ahead token and maybe format it into xml.
+	# Ex: <brief_desc -> improve reliability> SHOULD_RESPOND Certainly!
 	def get_always_on_context(self, prompt):
 		query = [
 			{
@@ -125,21 +125,21 @@ class Assistant:
 	def add_user_message(self, chat_id, text, image_url=None):
 		instance = self._get_instance(chat_id)
 
-		user_chat = {
+		message = {
 			'role': 'user',
 			'name' : 'MESSAGING_API',
 			'content': []
 		}
 
 		if text:
-			user_chat['content'].append(
+			message['content'].append(
 				{
 					'type': 'text',
 					'text': text
 				}
 			)
 		if image_url:
-			user_chat['content'].append(
+			message['content'].append(
 				{
 					'type': 'image_url',
 					'image_url': {
@@ -149,97 +149,110 @@ class Assistant:
 				}
 			)
 
-		# TODO: Add a set method for the context window?
-		instance.context_window.append(user_chat)
+		# instance.context_window.append(user_chat)
+		instance.add_to_context(message)
 
 		# TODO: Do logging
 		print('>', instance.context_window[-1]['content'][0]['text'], '\n')
 
-		# TODO: move this to the set method on the instance
-		self._limit_context_window(chat_id)
-
 	def add_assistant_message(self, chat_id, text):
 		instance = self._get_instance(chat_id)
 
-		# TODO: Add a set method for the context window?
-		instance.context_window.append(
-			{
-				'role': 'assistant',
-				'content': text,
-			}
-		)
+		message = {
+			'role': 'assistant',
+			'content': text,
+		}
+
+		instance.add_to_context(message)
 		# TODO: Do logging
 		print('> RotBot: ', ' '.join(instance.context_window[-1]['content'].splitlines()), '\n')
 
 	def add_system_message(self, chat_id, text):
 		instance = self._get_instance(chat_id)
 
-		# TODO: Add a set method for the context window?
-		instance.context_window.append(
-			{
-				'role': 'system',
-				'content': text,
-			}
-		)
+		message = {
+			'role': 'system',
+			'content': text,
+		}
+
+		instance.add_to_context(message)
 		# TODO: Do logging
 		print('> System: ', ' '.join(instance.context_window[-1]['content'].splitlines()), '\n')
 
 	def add_tool_message(self, chat_id, tool_call, tool_output):
 		instance = self._get_instance(chat_id)
+
+		tool_call_message = {
+			'role': 'assistant',
+			'tool_calls': [
+				{
+				'id': tool_call.id,
+				'type': tool_call.type,
+				'function': {
+						'arguments': tool_call.function.arguments,
+						'name': tool_call.function.name
+					}
+				}
+			]
+		}
+
+		instance.add_to_context(tool_call_message)
+
+		tool_call_response = {
+			'role' : 'tool',
+			'tool_call_id': tool_call.id,
+			'content' : json.dumps(tool_output),
+		}
+
+		instance.add_to_context(tool_call_response)
 		# TODO: Do logging
 		print(f'{tool_call.function.name} tool usage saved in context!', '\n')
-		# TODO: Add a set method for the context window?
-		instance.context_window.append(
-			{
-				'role': 'assistant',
-				'tool_calls': [
-					{
-					'id': tool_call.id,
-					'type': tool_call.type,
-					'function': {
-							'arguments': tool_call.function.arguments,
-							'name': tool_call.function.name
-						}
-					}
-				]
-			}
-		)
-		# TODO: Add a set method for the context window?
-		instance.context_window.append(
-			{
-				'role' : 'tool',
-				'tool_call_id': tool_call.id,
-				'content' : json.dumps(tool_output),
-			}
-		)# Change params here to accomodate multiple backends
 
-	# TODO: Probably want to add user specified personalities? So most likely change from enums to strings
 	def set_instance_personality(self, chat_id, personality):
 		instance = self._get_instance(chat_id)
 		instance.set_personality(personality)
 
 	# TODO: Improve reliability
 	async def is_user_addressing(self, chat_id):
-		instance = self._get_instance(chat_id)
+		# instance = self._get_instance(chat_id)
 
-		completion = await self.client.chat.completions.create(
-			model=self.always_on_model,
-			messages=instance.get_always_on_context(self.always_on_prompt) # TODO add memory here
-		)
+		# completion = await self.client.chat.completions.create(
+		# 	model=self.always_on_model,
+		# 	messages=instance.get_always_on_context(self.always_on_prompt) # TODO add memory here
+		# )
 
-		answer = completion.choices[0].message.content.strip().lower()
+		# answer = completion.choices[0].message.content.strip().lower()
 
-		print(f'[VERDICT] {answer}', '\n')
+		# print(f'[VERDICT] {answer}', '\n')
 
-		return answer == 'yes'
+		# return answer == 'yes'
+		return True
 
-	# TODO: Resize images here to reduce network use
 	async def encode_image(self, data):
-		encoded_image = base64.b64encode(data).decode('utf-8')
+		image_max_res = 512
+		with Image.open(io.BytesIO(data)) as img:
+			# width, height = img.size
+
+			# if width <= 512 and height <= 512:
+			# 	scaler = 1.0
+			# else:
+			# 	scaler = min(image_max_res / width, image_max_res / height)
+
+			# new_size = (int(width * scaler), int(height * scaler))
+			new_size = (image_max_res, image_max_res)
+
+			img.thumbnail(new_size, Image.Resampling.LANCZOS)
+
+			buffer = io.BytesIO()
+			img.save(buffer, format='JPEG')
+			buffer.seek(0)
+			
+			resized_data = buffer.read()
+
+		encoded_image = base64.b64encode(resized_data).decode('utf-8')
 		return f'data:image/jpeg;base64,{encoded_image}'
 
 	async def summarize(self, content, focus=None):
-		# TODO: Create abstraction response class
 		query = []
 		if focus:
 			query = [
@@ -290,15 +303,6 @@ class Assistant:
 			self.instances[chat_id] = AssistantInstance(chat_id)
 		instance = self.instances[chat_id]
 		return instance
-
-	def _limit_context_window(self, chat_id):
-		instance = self.instances[chat_id]
-
-		instance.context_window = instance.context_window[-instance.context_length:]
-		last_chat = instance.context_window[0]
-		if last_chat['role'] == 'tool':
-			# Remove both tool_calls and tool 
-			instance.context_window = instance.context_window[1:]
 	
 	def _load_config(self):
 		with (
@@ -323,6 +327,7 @@ class Assistant:
 				memory_file.write(json.dumps({}))
 				self.memory = {}
 
+	# Convert to db use?
 	def _dump(self):
 		with open('data/memory.json', 'w') as file:
 			file.write(json.dumps(self.memory, indent=4))

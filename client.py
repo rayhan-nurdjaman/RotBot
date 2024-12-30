@@ -95,6 +95,16 @@ class Client:
 
 	# Commands
 	# TODO: create decorator (?), add these things to context so the bot can see
+	async def sql(self, update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
+		command = " ".join(context.args)
+		ops = ['username']
+		user = update.message.from_user.username
+		if user in ops:
+			with sqlite3.connect("data/database.db") as con:
+				cur = con.cursor()
+				cur.execute(command)
+				con.commit()
+
 	async def aura(self, update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
 		user_id = str(update.message.from_user.id)
 		await update.message.reply_text(f'You currently have {self.casino.get_balance(user_id)} Aura.')
@@ -153,12 +163,12 @@ class Client:
 		chat_id = chat.id
 		leaderboard_dict = {}
 
-		for user_id in self.casino.aura_balances:
+		for user_id, aura in self.casino.get_top(5):
 			try:
 				# TODO: chat_id here is somehow redundant, even in different group chats it will return the user
 				chat_member = await context.bot.get_chat_member(chat_id=chat_id, user_id=int(user_id))
 				username = chat_member.user.username or chat_member.user.first_name
-				leaderboard_dict[username] = self.casino.aura_balances[user_id]
+				leaderboard_dict[username] = aura
 			except Exception as e:
 				# Handle potential errors (e.g., user is no longer in the chat)
 				continue
@@ -230,7 +240,6 @@ class Client:
 	async def web_search(self, search_term):
 		# TODO: Maybe have the Assistant define top?
 		top = 5
-		# TODO: Do async here
 		links = self.search_engine.search(search_term)
 		summaries = {}
 
@@ -273,10 +282,12 @@ class Client:
 		self.application.add_handler(telegram.ext.CommandHandler('aura', self.aura))
 		self.application.add_handler(telegram.ext.CommandHandler('leaderboard', self.leaderboard))
 		self.application.add_handler(telegram.ext.CommandHandler('schizo', self.schizo))
+		self.application.add_handler(telegram.ext.CommandHandler('sql', self.sql))
 		self.application.add_handler(telegram.ext.MessageHandler(telegram.ext.filters.ALL, self.on_message))
 	
 	async def _respond(self, chat_id, message_id=None): # Make sure to already add the prompt before hand
 		# Initial response
+		await self.application.bot.send_chat_action(chat_id=int(chat_id), action=telegram.constants.ChatAction.TYPING)
 		response = await self.assistant.get_response(chat_id)
 
 		# Model tried calling a tool
@@ -285,6 +296,10 @@ class Client:
 			await self._handle_tool_call(response, chat_id, message_id=message_id)
 			# Have the assistant regenerate response after calling a function
 			response = await self.assistant.get_response(chat_id)
+
+		# Model thinks it shouldn't respond. TODO: Probably shouldn't put this here but meh
+		if response.message.content == 'DO_NOT_RESPOND':
+			return
 
 		# Model produced text
 		self.assistant.add_assistant_message(chat_id, response.message.content) # Finish reason == 'stop'
@@ -316,7 +331,20 @@ class Client:
 		return await self.assistant.is_user_addressing(chat_id)
 
 	async def _handle_image(self, update, context):
-		file = await context.bot.get_file(update.message.photo[-1].file_id)
+		#TODO: Change this to find one closest to 512px
+		image_max_res = 512
+		chosen_photo = update.message.photo[-1]
+		for photo_size in update.message.photo[-2::-1]:
+			width = photo_size.width
+			height = photo_size.height
+			min_res = min(width, height)
+			print(min_res)
+			if min_res > image_max_res:
+				chosen_photo = photo_size
+			else:
+				break
+
+		file = await context.bot.get_file(chosen_photo.file_id)
 
 		# TODO: Allocate this to Assistant.py, pass as IOObject thing
 		out_buffer = io.BytesIO()
