@@ -9,6 +9,7 @@ import json
 import random
 import io
 import os
+import sqlite3
 
 import gif_fetcher
 import search_engine
