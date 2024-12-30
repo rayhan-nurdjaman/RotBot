@@ -38,9 +38,9 @@ class Casino:
 		os.makedirs("data", exist_ok=True)
 		with sqlite3.connect("data/database.db") as con:
 			cur = con.cursor()
-			res = cur.execute("SELECT name FROM sqlite_master WHERE name = ?", (self.table_name,)	)
+			res = cur.execute("SELECT name FROM sqlite_master WHERE name = users")
 			row = res.fetchone()
 			# Create table if doesn't exist
 			if row == None:
-				cur.execute("CREATE TABLE ?(user_id INTEGER PRIMARY KEY, aura INTEGER DEFAULT 0)", (self.table_name,))
+				cur.execute("CREATE TABLE users(user_id INTEGER PRIMARY KEY, aura INTEGER DEFAULT 0)")
 				con.commit()
