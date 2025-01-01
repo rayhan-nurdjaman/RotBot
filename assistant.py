@@ -8,12 +8,6 @@ from enum import Enum
 from PIL import Image
 from ruamel.yaml import YAML
 
-class Personality(Enum):
-	ROTBOT = 0
-	CODER = 1
-	CAVEMAN = 2
-	BRITISH = 3
-
 # Struct to manage each Assistant in a chat
 class AssistantInstance:
 	def __init__(self, chat_id):
@@ -26,7 +20,7 @@ class AssistantInstance:
 		self.context_window		= []
 		self.context_length		= 16
 		self.temperature		= 1.0
-		self.personality		= Personality.ROTBOT
+		self.personality		= 'rotbot'
 		self._load_config()
 		self.set_personality(self.personality)
 
@@ -39,22 +33,29 @@ class AssistantInstance:
 			self.temperature = root['temp']
 			self.context_length = root['context_length']
 
-	def set_personality(self, personality):
-		self.personality = personality
+	def set_personality(self, key):
+		self.personality = key
 		files = {
-			Personality.ROTBOT : 'personality/rotbot.yaml',
-			Personality.CODER : 'personality/coder.yaml',
-			Personality.CAVEMAN : 'personality/caveman.yaml',
-			Personality.BRITISH : 'personality/british.yaml',
+			'rotbot' : 'personality/rotbot.yaml',
+			'coder' : 'personality/coder.yaml',
+			'caveman' : 'personality/caveman.yaml',
+			'british' : 'personality/british.yaml',
+			'alien' : 'personality/alien.yaml',
+			'abg' : 'personality/abg.yaml',
+			'classic' : 'personality/classic.yaml',
 		}
-		file = files[personality]
-		with open(f'config/{file}') as stream:
-			yaml = YAML(typ='safe', pure=True)
-			root = yaml.load(stream)
-			self.model = root['model']
-			self.custom_instruction = root['custom_instruction']
-			self.temperature = root['temp']
-			self.context_length = root['context_length']
+		if key in files:
+			file = files[key]
+			with open(f'config/{file}') as stream:
+				yaml = YAML(typ='safe', pure=True)
+				root = yaml.load(stream)
+				self.model = root['model']
+				self.custom_instruction = root['custom_instruction']
+				self.temperature = root['temp']
+				self.context_length = root['context_length']
+			return True
+		else:
+			return False
 
 	def get_system_prompt(self):
 		processed_system_prompt = self.system_prompt
@@ -77,9 +78,6 @@ class AssistantInstance:
 	def get_context(self):
 		return self.get_system_prompt()+self.context_window
 
-	# TODO: This setup takes a bit too long having to send 2 requests, and is also expensive
-	# Could have the Assistant create a go ahead token and maybe format it into xml.
-	# Ex: <brief_desc -> improve reliability> SHOULD_RESPOND Certainly!
 	def get_always_on_context(self, prompt):
 		query = [
 			{
@@ -138,7 +136,7 @@ class Assistant:
 					'text': text
 				}
 			)
-		if image_url:
+		if image_url and False:
 			message['content'].append(
 				{
 					'type': 'image_url',
@@ -149,7 +147,6 @@ class Assistant:
 				}
 			)
 
-		# instance.context_window.append(user_chat)
 		instance.add_to_context(message)
 
 		# TODO: Do logging
@@ -208,37 +205,13 @@ class Assistant:
 		# TODO: Do logging
 		print(f'{tool_call.function.name} tool usage saved in context!', '\n')
 
-	def set_instance_personality(self, chat_id, personality):
+	def set_instance_personality(self, chat_id, key):
 		instance = self._get_instance(chat_id)
-		instance.set_personality(personality)
+		return instance.set_personality(key)
 
-	# TODO: Improve reliability
-	async def is_user_addressing(self, chat_id):
-		# instance = self._get_instance(chat_id)
-
-		# completion = await self.client.chat.completions.create(
-		# 	model=self.always_on_model,
-		# 	messages=instance.get_always_on_context(self.always_on_prompt) # TODO add memory here
-		# )
-
-		# answer = completion.choices[0].message.content.strip().lower()
-
-		# print(f'[VERDICT] {answer}', '\n')
-
-		# return answer == 'yes'
-		return True
-
-	async def encode_image(self, data):
+	def encode_image(self, data):
 		image_max_res = 512
 		with Image.open(io.BytesIO(data)) as img:
-			# width, height = img.size
-
-			# if width <= 512 and height <= 512:
-			# 	scaler = 1.0
-			# else:
-			# 	scaler = min(image_max_res / width, image_max_res / height)
-
-			# new_size = (int(width * scaler), int(height * scaler))
 			new_size = (image_max_res, image_max_res)
 
 			img.thumbnail(new_size, Image.Resampling.LANCZOS)
@@ -276,15 +249,18 @@ class Assistant:
 		return completion.choices[0].message.content
 
 	async def generate_image(self, prompt):
-		response = await self.client.images.generate(
-			model="dall-e-3",
-			prompt=prompt,
-			size="1024x1024",
-			quality="standard",
-			n=1,
-		)
-		image_url = response.data[0].url
-		return image_url
+		try:
+			response = await self.client.images.generate(
+				model="dall-e-3",
+				prompt=prompt,
+				size="1024x1024",
+				quality="standard",
+				n=1,
+			)
+			image_url = response.data[0].url
+			return image_url
+		except:
+			return None
 
 	# Assistant tools
 	def add_to_memory(self, content, chat_id):

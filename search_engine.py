@@ -8,15 +8,17 @@ class SearchEngine:
 		self.api_key = api_key
 		self.search_engine_id = search_engine_id
 
-	def search(self, search_term):
+	async def search(self, search_term):
 		params = {
 			'key': self.api_key,
 			'cx': self.search_engine_id,
 			'q': search_term
 		}
-		search_results = requests.get("https://customsearch.googleapis.com/customsearch/v1", params=params).json()
-		res = [item['link'] for item in search_results['items']]
-		return res
+		async with aiohttp.ClientSession() as session:
+			async with session.get("https://customsearch.googleapis.com/customsearch/v1", params=params) as response:
+				search_results = await response.json()
+				res = [item['link'] for item in search_results.get('items', [])]
+				return res
 
 	async def get_text(self, url):
 		async with aiohttp.ClientSession() as session:

@@ -13,7 +13,7 @@ import sqlite3
 
 import gif_fetcher
 import search_engine
-from assistant import Assistant, Personality
+from assistant import Assistant
 
 class Client:
 	def __init__(self, token, assistant, gif_fetcher, search_engine, casino, time_manager):
@@ -31,6 +31,10 @@ class Client:
 		self.enable_always_on 	= {}
 		# User data
 		self._register_handlers()
+
+		with open('data/chat.txt', 'a') as file:
+			file.write('INIT\n')
+
 		print('Client object initialized.\n')
 
 	# Public | Ideally any modification goes here
@@ -60,7 +64,6 @@ class Client:
 		message_id = str(update.message.message_id)
 		username = update.message.from_user.username
 		user_message = ''
-		# TODO: Have image handling done by assistant.py, pass by IOBytes object
 		photo_url = await self._handle_image(update, context) if update.message.photo else None
 
 		reply_prefix = ''
@@ -81,21 +84,22 @@ class Client:
 			user_message = f'{update.message.caption}'
 
 		if user_message or photo_url:
-			# TODO: Assistant sometimes does not recognize the usernames and gets mixed up. 
-			# May need to format in a common format?
+			with open('data/chat.txt', 'a') as file:
+				file.write('USER: ' + user_message + '\n')
+
 			entry = f'{username}: ' + reply_prefix + user_message
 			self.assistant.add_user_message(chat_id, entry, photo_url)
-			# TODO: disable checks if assistant is in a one-to-one convo
-			if self._can_talk(chat_id) and await self._should_talk(chat_id):
+			if self._can_talk(chat_id):
 				await self._respond(chat_id, message_id=message_id)
+			else:
+				self.assistant.add_user_message(chat_id, 'API: Always On is currently disabled. You are not allowed to respond.')
 
 	async def on_reminder(self, chat_id, reminder):
-		system_prompt = f'The reminder \'{reminder['description']}\' is up. Please remind accordingly. Notify the user by tagging their username.'
-		self.assistant.add_system_message(chat_id, system_prompt)
+		message = f'API: The reminder \'{reminder['description']}\' is up. Please remind accordingly. Notify the user by tagging their username.'
+		self.assistant.add_user_message(chat_id, message)
 		await self._respond(chat_id)
 
 	# Commands
-	# TODO: create decorator (?), add these things to context so the bot can see
 	async def sql(self, update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
 		command = " ".join(context.args)
 		ops = ['username']
@@ -108,28 +112,26 @@ class Client:
 
 	async def aura(self, update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
 		user_id = str(update.message.from_user.id)
+		chat_id = str(update.message.chat.id)
+		username = update.message.from_user.username
+		
+		self.assistant.add_user_message(chat_id, f'API: User {username} used the \'Aura\' command. Their Aura balance currently has {self.casino.get_balance(user_id)} Aura.')
 		await update.message.reply_text(f'You currently have {self.casino.get_balance(user_id)} Aura.')
 
 	async def penis(self, update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
 		user_id = str(update.message.from_user.id)
+		chat_id = str(update.message.chat.id)
+		username = update.message.from_user.username
 		value = random.randint(0, 12)
 		self.casino.modify_balance(user_id, value * 50)
+		self.assistant.add_user_message(chat_id, f'API: User {username} used the \'Penis\' command. They have gained {value * 50} Aura.')
 		await update.message.reply_text(f'8{'='*value}D')
 
 	async def schizo(self, update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
 		chat_id = str(update.message.chat.id)
 		key = context.args[0].lower()
-		if key == 'rotbot':
-			self.assistant.set_instance_personality(chat_id, Personality.ROTBOT)
-			await update.message.reply_text(f'Succesfully swapped personality to \'{key}\'')
-		elif key == 'coder':
-			self.assistant.set_instance_personality(chat_id, Personality.CODER)
-			await update.message.reply_text(f'Succesfully swapped personality to \'{key}\'')
-		elif key == 'caveman':
-			self.assistant.set_instance_personality(chat_id, Personality.CAVEMAN)
-			await update.message.reply_text(f'Succesfully swapped personality to \'{key}\'')
-		elif key == 'british':
-			self.assistant.set_instance_personality(chat_id, Personality.BRITISH)
+		success = self.assistant.set_instance_personality(chat_id, key)
+		if success:
 			await update.message.reply_text(f'Succesfully swapped personality to \'{key}\'')
 		else:
 			await update.message.reply_text(f'The personality \'{key}\' does not exist.')
@@ -145,15 +147,19 @@ class Client:
 			await update.message.reply_text('Usage: /coinflip <heads/tails> <amount>')
 		else:
 			user_id = str(update.message.from_user.id)
+			chat_id = str(update.message.chat.id)
+			username = update.message.from_user.username
 			if wager <= self.casino.get_balance(user_id):
 				outcome = outcomes[random.randint(0, 1)]
 				if guess == outcome:
 					# Won
 					self.casino.modify_balance(user_id, wager)
+					self.assistant.add_user_message(chat_id, f'API: {username} flipped a coin, wagering {wager} Aura on {guess}. The outcome was {outcome} and they won.')
 					await update.message.reply_text(f'Good guess! You won {wager} Aura.')
 				else:
 					# Lost
 					self.casino.modify_balance(user_id, -wager)
+					self.assistant.add_user_message(chat_id, f'API: {username} flipped a coin, wagering {wager} Aura on {guess}. The outcome was {outcome} and they lost.')
 					await update.message.reply_text(f'Tough luck! You lost {wager} Aura.')
 			else:
 				# Not enough
@@ -161,39 +167,34 @@ class Client:
 	
 	async def leaderboard(self, update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
 		chat = update.message.chat
+		# TODO: chat_id is almost always in str, but this implementation needs both
 		chat_id = chat.id
-		leaderboard_dict = {}
+		caller = update.message.from_user.username
+		leaderboard_array = []
 
 		for user_id, aura in self.casino.get_top(5):
-			try:
-				# TODO: chat_id here is somehow redundant, even in different group chats it will return the user
-				chat_member = await context.bot.get_chat_member(chat_id=chat_id, user_id=int(user_id))
-				username = chat_member.user.username or chat_member.user.first_name
-				leaderboard_dict[username] = aura
-			except Exception as e:
-				# Handle potential errors (e.g., user is no longer in the chat)
-				continue
+			# TODO: chat_id here is somehow redundant, even in different group chats it will return the user
+			chat_member = await context.bot.get_chat_member(chat_id=chat_id, user_id=int(user_id))
+			username = chat_member.user.username
+			leaderboard_array.append((username, aura))
 
-		# Sort the leaderboard dictionary by balance values (descending)
-		sorted_leaderboard = sorted(leaderboard_dict.items(), key=lambda item: item[1], reverse=True)
-
-		# TODO: This is a bit much to put under one function, ideally split into a rank formatter or something
 		leaderboard_string = ""
 		rank = 1
-		for username, balance in sorted_leaderboard:
-			leaderboard_string += f"{rank}. {username}: {balance}\n"
+		for username, balance in leaderboard_array:
+			leaderboard_string += f"{rank}. {username}: {balance} Aura\n"
 			rank += 1
 
-		# Add a title or header to the leaderboard message
-		if leaderboard_string:
-			leaderboard_message = f"{leaderboard_string}"
-		else:
-			leaderboard_message = "No data available for the leaderboard."
+		# Can modify string here
 
-		# Send the leaderboard message
-		await update.message.reply_text(
-			leaderboard_message,
-		)
+		if leaderboard_string:
+			self.assistant.add_user_message(str(chat_id), f'API: User {caller} used the \'Aura Leaderboard\' command. The current Aura leaderboard is as follows:\n{leaderboard_string}')
+			await update.message.reply_text(
+				leaderboard_string,
+			)
+		else:
+			await update.message.reply_text(
+				'No data available for the leaderboard.',
+			)
 	
 	async def roll_for_humor(self, update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
 		user_id = str(update.message.from_user.id)
@@ -214,15 +215,15 @@ class Client:
 		if not chat_id in self.enable_always_on:
 			self.enable_always_on[chat_id] = False
 		self.enable_always_on[chat_id] = not self.enable_always_on[chat_id]
-		await update.message.reply_text(f'Always on is now {'Enabled' if self.enable_always_on[chat_id] else 'Disabled'}')
+		if self.enable_always_on[chat_id]:
+			self.assistant.add_user_message(chat_id, 'API: Always On is now enabled. You are now allowed to respond to user messages.')
+			await update.message.reply_text(f'Always On is now Enabled')
+		else:
+			self.assistant.add_user_message(chat_id, 'API: Always On is now disabled. You are not allowed to respond to user messages.')
+			await update.message.reply_text(f'Always On is now Disabled')
 
 	# Client Tools
-	# TODO: tbh could dissolve most of these and leave the rest as private functions
-	def get_time(self):
-		return self.time_manager.get_time()
-
 	# TODO: Description criteria not strict. Assistant sometimes mistakes one reminder for someone else.
-	# TODO: This feels a bit redundant
 	def set_reminder(self, chat_id, description, year, month, day, hour, minute, second):
 		self.time_manager.add_reminder(chat_id, description, year, month, day, hour, minute, second)
 
@@ -230,18 +231,18 @@ class Client:
 		chat_id = int(chat_id)
 		# TODO: Do logging
 		print(f'RotBot tried searching for {search_term} on Tenor.\n')
-		# TODO: Implement async search
-		url = self.gif_fetcher.random(search_term)
+		url = await self.gif_fetcher.random(search_term)
 		await self.application.bot.send_animation(chat_id=chat_id, animation=url)
 		return {
 			'search_term' : search_term,
 			'state' : 'Sent GIF successfully.'
 		}
 
+	# TODO: This could be all defined within search_engine.py
 	async def web_search(self, search_term):
 		# TODO: Maybe have the Assistant define top?
 		top = 5
-		links = self.search_engine.search(search_term)
+		links = await self.search_engine.search(search_term)
 		summaries = {}
 
 		async def process_link(link):
@@ -249,6 +250,7 @@ class Client:
 				print(f'Searching {link}\n')
 				raw_text = await self.search_engine.get_text(link)
 				print(f'Finished searching {link}, summarizing\n')
+				# TODO: Make RotBot ask GPT the question, summarising often produces too long of a response without the info we need.
 				summary = await self.assistant.summarize(raw_text)
 				print(f'Finished summarizing {link}\n{summary}\n')
 				return link, summary
@@ -298,12 +300,15 @@ class Client:
 			# Have the assistant regenerate response after calling a function
 			response = await self.assistant.get_response(chat_id)
 
+		self.assistant.add_assistant_message(chat_id, response.message.content) # Finish reason == 'stop'
 		# Model thinks it shouldn't respond. TODO: Probably shouldn't put this here but meh
-		if response.message.content == 'DO_NOT_RESPOND':
+		with open('data/chat.txt', 'a') as file:
+			file.write('ASSISTANT: ' + response.message.content + '\n')
+
+		if 'DO_NOT_RESPOND' in response.message.content:
 			return
 
 		# Model produced text
-		self.assistant.add_assistant_message(chat_id, response.message.content) # Finish reason == 'stop'
 		await self.application.bot.send_message(
 			chat_id=int(chat_id),
 			text=response.message.content,
@@ -311,35 +316,13 @@ class Client:
 			parse_mode=telegram.constants.ParseMode.MARKDOWN
 		)
 
-		# TODO: Make a send bubbles function to make interactions more natural
-		# chat_bubbles = response.message.content.splitlines()
-
-		# for i in range(len(chat_bubbles)):
-		# 	bubble = chat_bubbles[i]
-		# 	if bubble and not bubble.isspace():
-		# 		await self.application.bot.send_chat_action(chat_id=int(chat_id), action=telegram.constants.ChatAction.TYPING)
-		# 		if i == 0 and message_id:
-		# 			await self.application.bot.send_message(
-		# 				chat_id=int(chat_id),
-		# 				text=bubble,
-		# 				reply_to_message_id=message_id
-		# 			)
-		# 		else:
-		# 			await asyncio.sleep(min(len(bubble)/5 / (self.WPM/60), 5.0))
-		# 			await self.application.bot.send_message(chat_id=int(chat_id), text=bubble)
-
-	async def _should_talk(self, chat_id):
-		return await self.assistant.is_user_addressing(chat_id)
-
 	async def _handle_image(self, update, context):
-		#TODO: Change this to find one closest to 512px
 		image_max_res = 512
 		chosen_photo = update.message.photo[-1]
 		for photo_size in update.message.photo[-2::-1]:
 			width = photo_size.width
 			height = photo_size.height
 			min_res = min(width, height)
-			print(min_res)
 			if min_res > image_max_res:
 				chosen_photo = photo_size
 			else:
@@ -347,13 +330,12 @@ class Client:
 
 		file = await context.bot.get_file(chosen_photo.file_id)
 
-		# TODO: Allocate this to Assistant.py, pass as IOObject thing
 		out_buffer = io.BytesIO()
 		await file.download_to_memory(out_buffer)
 		out_buffer.seek(0)
 		data = out_buffer.read()
 
-		return await self.assistant.encode_image(data)
+		return self.assistant.encode_image(data)
 
 	async def _handle_tool_call(self, response, chat_id, message_id=None):
 		tool_call = response.message.tool_calls[0]
@@ -369,12 +351,12 @@ class Client:
 		elif tool_name == 'send_gif':
 			tool_output = await self.send_gif(chat_id, tool_arguments.get('search_term'))
 		elif tool_name == 'get_time':
-			tool_output	= self.get_time()
+			tool_output	= self.time_manager.get_time()
 		elif tool_name == 'web_search':
 			await self.application.bot.send_message(chat_id=chat_id, text=f'Googling \'{tool_arguments.get('search_term')}\'...')
 			tool_output	= await self.web_search(tool_arguments.get('search_term'))
 		elif tool_name == 'set_reminder':
-			tool_output = self.set_reminder(
+			self.time_manager.add_reminder(
 				chat_id,
 				tool_arguments.get('description'),
 				int(tool_arguments.get('year')),
@@ -384,5 +366,18 @@ class Client:
 				int(tool_arguments.get('minute')),
 				int(tool_arguments.get('second'))
 			)
+		elif tool_name == 'image_gen':
+			image_prompt = tool_arguments.get('prompt')
+			await self.application.bot.send_message(chat_id=chat_id, text=f'Generating \'{image_prompt}\'...')
+			url = await self.assistant.generate_image(image_prompt)
+			if url:
+				await self.application.bot.send_photo(int(chat_id), url)
+				tool_output = {
+					'state' : 'Created image successfully.'
+				}
+			else:
+				tool_output = {
+					'state' : 'Failed to create image.'
+				}
 
 		self.assistant.add_tool_message(chat_id, tool_call, tool_output)

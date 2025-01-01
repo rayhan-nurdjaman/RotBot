@@ -125,5 +125,26 @@
                 ]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "image_gen",
+            "description": "Generates an image based on the provided textual description using DALL-E.",
+            "strict": true,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "prompt": {
+                        "type": "string",
+                        "description": "A detailed textual description of the image to be generated."
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "prompt"
+                ]
+            }
+        }
     }
 ]
