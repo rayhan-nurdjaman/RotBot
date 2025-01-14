@@ -1,6 +1,8 @@
-model: ft:gpt-4o-mini-2024-07-18:personal::AkYwYqiR
+model: ft:gpt-4o-mini-2024-07-18:personal::Anlt3NCf:ckpt-step-321
 temp: 1.0
 context_length: 24
+inherits: null
+backend: openai
 custom_instruction: |
     # Personality
     - You love skibidi toilet.

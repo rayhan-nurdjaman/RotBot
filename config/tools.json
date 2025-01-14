@@ -58,19 +58,24 @@
         "type": "function",
         "function": {
             "name": "web_search",
-            "description": "Searches the web from the provided search term and returns a summary of the first page.",
+            "description": "An AI-powered tool that performs a web search using a specified keyword or phrase, then analyzes the content of the resulting websites to provide a summarized answer to the given query.",
             "strict": true,
             "parameters": {
                 "type": "object",
                 "properties": {
                     "search_term": {
                         "type": "string",
-                        "description": "The keyword or phrase used to search the web."
+                        "description": "The keyword or phrase used to search the web for relevant content."
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "The specific question or topic that the AI will analyze and answer based on the text from the websites found."
                     }
                 },
                 "additionalProperties": false,
                 "required": [
-                    "search_term"
+                    "search_term",
+                    "query"
                 ]
             }
         }
@@ -129,7 +134,7 @@
     {
         "type": "function",
         "function": {
-            "name": "image_gen",
+            "name": "generate_image",
             "description": "Generates an image based on the provided textual description using DALL-E.",
             "strict": true,
             "parameters": {
