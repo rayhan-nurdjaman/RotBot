@@ -70,12 +70,22 @@
                     "query": {
                         "type": "string",
                         "description": "The specific question or topic that the AI will analyze and answer based on the text from the websites found."
+                    },
+                    "sites": {
+                        "type": "number",
+                        "description": "The number of top sites to browse (3-7)."
+                    },
+                    "idle_message": {
+                        "type": "string",
+                        "description": "The message displayed to users while waiting for a response from the web search."
                     }
                 },
                 "additionalProperties": false,
                 "required": [
                     "search_term",
-                    "query"
+                    "query",
+                    "sites",
+                    "idle_message"
                 ]
             }
         }

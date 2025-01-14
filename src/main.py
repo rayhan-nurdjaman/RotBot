@@ -16,6 +16,7 @@ load_dotenv()
 
 import client as Client
 import assistant as Assistant
+import data_collection as DataCollection
 from instance import Instance
 
 from tools import time_manager as TimeManager
@@ -42,6 +43,8 @@ async def on_reminder(instance_id, reminder):
 	await Client.send_message(instance.unique_id, response)
 
 async def on_message(instance_id, text, images=[], no_response=False):
+	DataCollection.add_user_message(text)
+
 	instance = get_instance(instance_id)
 	instance.add_user_message(text)
 
@@ -54,30 +57,32 @@ async def on_message(instance_id, text, images=[], no_response=False):
 	await Client.send_indicator(instance, Client.Indicator.GENERATING_RESPONSE)
 	response = await Assistant.get_response(instance)
 	await Client.send_message(instance.unique_id, response)
+	DataCollection.add_assistant_message(response)
 
 # Commands, should somehow make a pipeline for defining them
-async def set_instance_personality(instance_id):
+async def set_instance_personality(instance_id, key):
 	instance = get_instance(instance_id)
-	success = instance.set_personality(key)
-	if success:
+	try:
+		instance.set_personality(key)
 		await Client.send_message(instance.unique_id, f'Succesfully swapped personality to \'{key}\'')
-	else:
+	except:
 		await Client.send_message(instance.unique_id, f'The personality \'{key}\' does not exist.')
 
 async def toggle_always_on(instance_id):
 	instance = get_instance(instance_id)
 	instance.always_on = not instance.always_on
 	if instance.always_on:
-		# self.assistant.add_user_message(chat_id, 'API: Always On is now enabled. You are now allowed to respond to user messages.')
+		instance.add_user_message('API: Always On is now enabled. You are now allowed to respond to user messages.')
 		await Client.send_message(instance.unique_id, f'Always On is now Enabled')
 	else:
-		# self.assistant.add_user_message(chat_id, 'API: Always On is now disabled. You are not allowed to respond to user messages.')
+		instance.add_user_message('API: Always On is now disabled. You are not allowed to respond to user messages.')
 		await Client.send_message(instance.unique_id, f'Always On is now Disabled')
 
 # Entry point
 async def main():
 	# Client callbacks
 	Client.on_message_callback = on_message
+	Client.set_personality_callback = set_instance_personality
 
 	poll_rate = 1
 	try:

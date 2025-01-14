@@ -5,6 +5,13 @@ from ruamel.yaml import YAML
 
 logger = logging.getLogger(__name__)
 
+personality_index = {}
+personality_dir = 'config/personality/'
+
+with open(f'{personality_dir}index.yaml') as stream:
+	yaml = YAML(typ='safe', pure=True)
+	personality_index = yaml.load(stream)
+
 class Reminder:
 	def __init__(self):
 		self.unix_time
@@ -15,7 +22,7 @@ class Instance:
 		self.unique_id 			= unique_id
 		self.always_on			= True
 		# Personality
-		self.personality		= 'classic'
+		self.personality		= 'rotbot'
 		self.modalities			= ['text', 'image']
 		self.model 				= None
 		self.system_prompt 		= None
@@ -34,27 +41,14 @@ class Instance:
 
 	def set_personality(self, key):
 		self.personality = key
-		files = {
-			'rotbot' : 'personality/rotbot.yaml',
-			'coder' : 'personality/coder.yaml',
-			'caveman' : 'personality/caveman.yaml',
-			'british' : 'personality/british.yaml',
-			'alien' : 'personality/alien.yaml',
-			'abg' : 'personality/abg.yaml',
-			'classic' : 'personality/classic.yaml',
-		}
-		if key in files:
-			file = files[key]
-			with open(f'config/{file}') as stream:
-				yaml = YAML(typ='safe', pure=True)
-				root = yaml.load(stream)
-				self.model = root['model']
-				self.custom_instruction = root['custom_instruction']
-				self.temperature = root['temp']
-				self.context_length = root['context_length']
-			return True
-		else:
-			return False
+		file = personality_dir + personality_index[key]
+		with open(file) as stream:
+			yaml = YAML(typ='safe', pure=True)
+			root = yaml.load(stream)
+			self.model = root['model']
+			self.temperature = root['temp']
+			self.context_length = root['context_length']
+			self.custom_instruction = root['custom_instruction']
 
 	def get_context(self):
 		return self._get_system_prompt()+self.context_window
@@ -93,7 +87,6 @@ class Instance:
 			)
 
 		self.add_to_context(message)
-
 		logger.info(f'{self.context_window[-1]['content'][0]['text']}\n')
 
 	def add_assistant_message(self, text):
@@ -140,14 +133,20 @@ class Instance:
 
 		self.add_to_context(tool_call_response)
 
+	# def add_to_memory(content):
+	# 	self.memory.append(content)
+	# 	with open(f'data/memory/{self.unique_id}.json', 'w') as file:
+	# 		file.write(json.dumps(self.memory, indent=4))
+
 	# Private
+	
 	def _load_config(self):
 		with open('config/base.yaml') as stream:
 			yaml = YAML(typ='safe', pure=True)
 			root = yaml.load(stream)
 			self.model = root['model']
-			self.system_prompt = root['system_prompt']
 			self.temperature = root['temp']
+			self.system_prompt = root['system_prompt']
 			self.context_length = root['context_length']
 
 	def _get_system_prompt(self):

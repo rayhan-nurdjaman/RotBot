@@ -38,8 +38,7 @@ async def get_response(instance):
 		response = await ChatCompletion.create(instance.get_context(), instance.model, tools)
 
 	instance.add_assistant_message(response.message.content) # Finish reason == 'stop'
-	with open('data/chat.txt', 'a') as file:
-		file.write('ASSISTANT: ' + response.message.content + '\n')
+
 	return response.message.content
 
 def encode_image(data):

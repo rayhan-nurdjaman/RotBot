@@ -15,7 +15,12 @@ async def get_tool_response(instance, tool_name, tool_arguments):
 	match tool_name:
 		case 'save_to_memory':
 			# Logic for saving to memory
-			pass
+			tool_output = self.assistant.add_to_memory(tool_arguments.get('user_info'), chat_id)
+			instance.memory.append
+			tool_output = {
+				'info' : content,
+				'state' : 'Information successfully saved.'
+			}
 		case 'send_gif':
 			search_term = tool_arguments.get('search_term')
 			logger.info(f'RotBot tried searching for {search_term} on Tenor.')
@@ -28,7 +33,8 @@ async def get_tool_response(instance, tool_name, tool_arguments):
 		case 'get_time':
 			tool_response = TimeManager.get_time()
 		case 'web_search':
-			await Client.send_indicator(instance, Client.Indicator.SEARCHING_THE_WEB)
+			# await Client.send_indicator(instance, Client.Indicator.SEARCHING_THE_WEB)
+			await Client.send_message(instance.unique_id, tool_arguments.get('idle_message'))
 			tool_response = await SearchEngine.search(tool_arguments.get('search_term'), tool_arguments.get('query'))
 		case 'set_reminder':
 			await Client.send_indicator(instance, Client.Indicator.REMINDER_CREATED)
