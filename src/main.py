@@ -64,25 +64,26 @@ async def set_instance_personality(instance_id, key):
 	instance = get_instance(instance_id)
 	try:
 		instance.set_personality(key)
-		await Client.send_message(instance.unique_id, f'Succesfully swapped personality to \'{key}\'')
+		await Client.send_message(instance.unique_id, f'_Succesfully swapped personality to \'{key}\'_')
 	except:
-		await Client.send_message(instance.unique_id, f'The personality \'{key}\' does not exist.')
+		await Client.send_message(instance.unique_id, f'_The personality \'{key}\' does not exist._')
 
 async def toggle_always_on(instance_id):
 	instance = get_instance(instance_id)
 	instance.always_on = not instance.always_on
 	if instance.always_on:
 		instance.add_user_message('API: Always On is now enabled. You are now allowed to respond to user messages.')
-		await Client.send_message(instance.unique_id, f'Always On is now Enabled')
+		await Client.send_message(instance.unique_id, '_Always On is now Enabled_')
 	else:
 		instance.add_user_message('API: Always On is now disabled. You are not allowed to respond to user messages.')
-		await Client.send_message(instance.unique_id, f'Always On is now Disabled')
+		await Client.send_message(instance.unique_id, '_Always On is now Disabled_')
 
 # Entry point
 async def main():
 	# Client callbacks
-	Client.on_message_callback = on_message
-	Client.set_personality_callback = set_instance_personality
+	Client.on_message_callback					= on_message
+	Client.set_instance_personality_callback	= set_instance_personality
+	Client.toggle_always_on_callback			= toggle_always_on
 
 	poll_rate = 1
 	try:
