@@ -27,8 +27,8 @@ api_key = os.getenv('TELEGRAM_API_KEY')
 application = telegram.ext.Application.builder().token(api_key).build()
 
 on_message_callback					= None
-set_instance_personality_callback	= None
 toggle_always_on_callback			= None
+set_instance_personality_callback	= None
 
 async def init():
 	await application.initialize()
@@ -46,6 +46,9 @@ async def send_message(chat_id, message, message_id=None):
 		text=message,
 		parse_mode=telegram.constants.ParseMode.MARKDOWN
 	)
+
+async def send_client_message(chat_id, message, message_id=None):
+	await send_message(chat_id, f'_{message}_')
 
 async def send_image(chat_id, image_url):
 	await application.bot.send_photo(chat_id, image_url)
@@ -127,32 +130,36 @@ async def sql(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAUL
 			con.commit()
 
 async def aura(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
-	user_id = update.message.from_user.id
+	aura = Casino.get_balance(update.message.from_user.id)
+	caller = update.message.from_user.username
 	chat_id = update.message.chat.id
-	username = update.message.from_user.username
-	message = f'API: User {username} used the \'Aura\' command. Their Aura balance currently has {Casino.get_balance(user_id)} Aura.'
+
+	message = f'API: {caller} used the \'Aura\' command. Their Aura balance currently has {aura} Aura.'
 
 	await on_message_callback(chat_id, message, images=[], no_response=True)
-	await send_message(chat_id, f'_You currently have {Casino.get_balance(user_id)} Aura._')
+	await send_client_message(chat_id, f'You currently have {aura} Aura.')
 
 async def penis(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
+	caller = update.message.from_user.username
 	chat_id = update.message.chat.id
-	username = update.message.from_user.username
 	value = random.randint(0, 12)
-	Casino.modify_balance(update.message.from_user.id, value * 50)
+	aura_gain = value * 50
 
-	message = f'API: {username} used the \'Penis\' command. They have gained {value * 50} Aura.'
+	Casino.modify_balance(update.message.from_user.id, aura_gain)
+
+	message = f'API: {caller} used the \'Penis\' command. They have gained {aura_gain} Aura.'
 	await on_message_callback(chat_id, message, images=[], no_response=True)
 
-	await send_message(chat_id, f'8{'='*value}D')
+	await send_client_message(chat_id, f'8{'='*value}D')
 
 async def schizo(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
 	try:
 		await set_instance_personality_callback(update.message.chat.id, context.args[0].lower())
 	except IndexError:
-		await send_message(chat_id, '_Usage: /schizo <personality>_')
+		await send_client_message(chat_id, 'Usage: /schizo <personality>')
 
 async def coinflip(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
+	chat_id = update.message.chat.id
 	outcomes = ['heads', 'tails']
 	try:
 		guess = context.args[0].lower()
@@ -160,32 +167,31 @@ async def coinflip(update: telegram.Update, context: telegram.ext.ContextTypes.D
 			raise ValueError
 		wager = int(context.args[1])
 	except (ValueError, IndexError):
-		await send_message(chat_id, '_Usage: /coinflip <heads/tails> <amount>_')
+		await send_client_message(chat_id, 'Usage: /coinflip <heads/tails> <amount>')
 	else:
+		caller = update.message.from_user.username
 		user_id = update.message.from_user.id
-		username = update.message.from_user.username
 		if wager <= Casino.get_balance(user_id):
 			outcome = random.choice(outcomes)
 			message = ''
 			if guess == outcome:
 				# Won
 				Casino.modify_balance(user_id, wager)
-				message = f'API: {username} flipped a coin, wagering {wager} Aura on {guess}. The outcome was {outcome} and they won.'
-				await update.message.reply_text()
-				await send_message(chat_id, f'_Good guess! You won {wager} Aura._')
+				message = f'API: {caller} flipped a coin, wagering {wager} Aura on {guess}. The outcome was {outcome} and they won.'
+				await send_client_message(chat_id, f'Good guess! You won {wager} Aura.')
 			else:
 				# Lost
 				Casino.modify_balance(user_id, -wager)
-				message = f'API: {username} flipped a coin, wagering {wager} Aura on {guess}. The outcome was {outcome} and they lost.'
-				await send_message(chat_id, f'_Tough luck! You lost {wager} Aura._')
+				message = f'API: {caller} flipped a coin, wagering {wager} Aura on {guess}. The outcome was {outcome} and they lost.'
+				await send_client_message(chat_id, f'Tough luck! You lost {wager} Aura.')
 			await on_message_callback(update.message.chat.id, message, images=[], no_response=True)
 		else:
 			# Not enough
-			await send_message(chat_id, f'_Not enough Aura!_')
+			await send_client_message(chat_id, f'Not enough Aura!')
 
 async def leaderboard(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
-	chat_id = update.message.chat.id
 	caller = update.message.from_user.username
+	chat_id = update.message.chat.id
 	leaderboard_string = ""
 
 	rank = 1
@@ -197,27 +203,26 @@ async def leaderboard(update: telegram.Update, context: telegram.ext.ContextType
 
 	if leaderboard_string:
 		message = f'API: {caller} used the \'Aura Leaderboard\' command. The current Aura leaderboard is as follows:\n{leaderboard_string}'
+		await send_client_message(chat_id, leaderboard_string)
 		await on_message_callback(chat_id, message, images=[], no_response=True)
-		await update.message.reply_text(
-			leaderboard_string,
-		)
 	else:
-		await send_message(chat_id, f'_No data available for the leaderboard._')
+		message = f'API: {caller} used the \'Aura Leaderboard\' command. There is currently nobody in the leaderboard.'
+		await send_client_message(chat_id, f'No data available for the leaderboard.')
+		await on_message_callback(chat_id, message, images=[], no_response=True)
 
 async def roll_for_humor(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
 	chat_id = update.message.chat.id
+	caller = update.message.from_user.username
 
 	rolled = random.randint(1, 6)
 	aura = rolled * 100
-	self.casino.modify_balance(update.message.from_user.id, aura)
+	Casino.modify_balance(update.message.from_user.id, aura)
 
 	await context.bot.send_video_note(chat_id=chat_id, video_note=open(f'dicerolls/{rolled}.mp4', 'rb'))
 
 	message = '💀'*rolled
-	if update.message.reply_to_message:
-		await update.message.reply_to_message.reply_text(message)
-	else:
-		await update.message.reply_text(message)
+	
+	await send_client_message(chat_id, message)
 	await on_message_callback(chat_id, f'API: {caller} used the \'Roll Humor\' command. They have gained {aura} Aura.', images=[], no_response=True)
 
 async def toggle_always_on(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
