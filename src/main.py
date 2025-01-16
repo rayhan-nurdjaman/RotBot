@@ -92,7 +92,7 @@ async def main():
 			await TimeManager.poll(on_reminder)
 			await asyncio.sleep(1.0 / poll_rate)
 	finally:
-		Client.shutdown()
+		await Client.shutdown()
 
 if __name__ == "__main__":
 	asyncio.run(main())

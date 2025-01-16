@@ -26,15 +26,21 @@ async def get_response(instance):
 	response = await ChatCompletion.create(instance.get_context(), instance.model, tools)
 
 	while response.finish_reason != 'stop':
-		tool_call		= response.message.tool_calls[0]
-		tool_call_id	= tool_call.id # String
-		tool_name		= tool_call.function.name # String
-		tool_arguments	= json.loads(tool_call.function.arguments) # Dict
+		logger.info(f'Tools called: {len(response.message.tool_calls)}')
 
-		instance.add_tool_call(tool_call_id, tool_name, tool_arguments)
-		tool_response = await ToolManager.get_tool_response(instance, tool_name, tool_arguments)
-		instance.add_tool_response(tool_call_id, tool_response)
-		
+		async def process_tool_call(tool_call):
+			tool_call_id	= tool_call.id # String
+			tool_name		= tool_call.function.name # String
+			tool_arguments	= json.loads(tool_call.function.arguments) # Dict
+
+			tool_response = await ToolManager.get_tool_response(instance, tool_name, tool_arguments)
+			# Not thread safe
+			instance.add_tool_call(tool_call_id, tool_name, tool_arguments)
+			instance.add_tool_response(tool_call_id, tool_response)
+
+		tasks = [process_tool_call(tool_call) for tool_call in response.message.tool_calls]
+		await asyncio.gather(*tasks)
+
 		response = await ChatCompletion.create(instance.get_context(), instance.model, tools)
 
 	instance.add_assistant_message(response.message.content) # Finish reason == 'stop'

@@ -70,7 +70,7 @@ async def create(messages, model, tools=None, temp=1.0):
 			model=model,
 			temperature=temp,
 			tools=tools,
-			parallel_tool_calls=False,
+			parallel_tool_calls=True,
 			#stream=True
 		)
 		return response.choices[0]

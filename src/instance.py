@@ -17,12 +17,13 @@ class Reminder:
 		self.unix_time
 		self.description
 
+#TODO: use tiktoken to ensure context length.
 class Instance:
 	def __init__(self, unique_id):
 		self.unique_id 			= unique_id
 		self.always_on			= True
 		# Personality
-		self.personality		= 'rotbot'
+		self.personality		= 'lockedin'
 		self.modalities			= ['text', 'image']
 		self.model 				= None
 		self.system_prompt 		= None

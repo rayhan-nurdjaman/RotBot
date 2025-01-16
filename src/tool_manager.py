@@ -10,8 +10,10 @@ from tools import image_generation as ImageGeneration
 
 logger = logging.getLogger(__name__)
 
+# Call tools
 async def get_tool_response(instance, tool_name, tool_arguments):
 	tool_response = None
+	logger.info(f'{tool_name} tool called.')
 	match tool_name:
 		case 'save_to_memory':
 			# Logic for saving to memory
@@ -33,9 +35,13 @@ async def get_tool_response(instance, tool_name, tool_arguments):
 		case 'get_time':
 			tool_response = TimeManager.get_time()
 		case 'web_search':
-			# await Client.send_indicator(instance, Client.Indicator.SEARCHING_THE_WEB)
 			await Client.send_message(instance.unique_id, tool_arguments.get('idle_message'))
-			tool_response = await SearchEngine.search(tool_arguments.get('search_term'), tool_arguments.get('query'))
+			tool_response = await SearchEngine.get_links(tool_arguments.get('search_term'))
+		case 'get_url_text':
+			await Client.send_message(instance.unique_id, tool_arguments.get('idle_message'))
+			tool_response = {
+				'text' : await SearchEngine.get_text(tool_arguments.get('url'))
+			}
 		case 'set_reminder':
 			await Client.send_indicator(instance, Client.Indicator.REMINDER_CREATED)
 			tool_response = TimeManager.add_reminder(
@@ -49,12 +55,12 @@ async def get_tool_response(instance, tool_name, tool_arguments):
 				int(tool_arguments.get('second'))
 			)
 		case 'generate_image':
-			await Client.send_indicator(instance, Client.Indicator.GENERATING_IMAGE)
+			await Client.send_message(instance.unique_id, tool_arguments.get('idle_message'))
 			image_prompt = tool_arguments.get('prompt')
 			url = await ImageGeneration.get_url(image_prompt)
 			if url:
 				await Client.send_image(instance.unique_id, url)
-				tool_response = {'state': 'Created image successfully.'}
+				tool_response = {'state': 'Created and sent image successfully.'}
 			else:
 				tool_response = {'state': 'Failed to create image.'}
 	return tool_response

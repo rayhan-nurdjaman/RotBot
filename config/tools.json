@@ -58,7 +58,7 @@
         "type": "function",
         "function": {
             "name": "web_search",
-            "description": "An AI-powered tool that performs a web search using a specified keyword or phrase, then analyzes the content of the resulting websites to provide a summarized answer to the given query.",
+            "description": "Returns a list of websites and their info such as their title, url, and brief snippets",
             "strict": true,
             "parameters": {
                 "type": "object",
@@ -67,24 +67,45 @@
                         "type": "string",
                         "description": "The keyword or phrase used to search the web for relevant content."
                     },
-                    "query": {
-                        "type": "string",
-                        "description": "The specific question or topic that the AI will analyze and answer based on the text from the websites found."
-                    },
-                    "sites": {
-                        "type": "number",
-                        "description": "The number of top sites to browse (3-7)."
-                    },
                     "idle_message": {
                         "type": "string",
-                        "description": "The message displayed to users while waiting for a response from the web search."
+                        "description": "The message displayed to users while you wait for a response from the tool."
                     }
                 },
                 "additionalProperties": false,
                 "required": [
                     "search_term",
+                    "idle_message"
+                ]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_url_text",
+            "description": "An AI-powered tool that reads the given website from the url and then analyzes the content of the resulting websites to provide a summarized answer to the given query.",
+            "strict": true,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "The website url the AI will read and analyze from."
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "The specific question or topic that the AI will analyze and answer based on the text from the websites found."
+                    },
+                    "idle_message": {
+                        "type": "string",
+                        "description": "The message displayed to users while waiting for a response from the tool."
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "url",
                     "query",
-                    "sites",
                     "idle_message"
                 ]
             }
@@ -153,11 +174,16 @@
                     "prompt": {
                         "type": "string",
                         "description": "A detailed textual description of the image to be generated."
+                    },
+                    "idle_message": {
+                        "type": "string",
+                        "description": "The message displayed to users while waiting for a response from the tool."
                     }
                 },
                 "additionalProperties": false,
                 "required": [
-                    "prompt"
+                    "prompt",
+                    "idle_message"
                 ]
             }
         }
