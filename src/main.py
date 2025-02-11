@@ -17,14 +17,13 @@ load_dotenv()
 import client as Client
 import assistant as Assistant
 import data_collection as DataCollection
+import always_on as AlwaysOn
 from instance import Instance
 
 from tools import time_manager as TimeManager
 from tools import search_engine as SearchEngine
 from tools import image_generation as ImageGeneration
 
-# Should instances be here?
-# Maybe an instance manager singleton?
 instances = {}
 
 def get_instance(instance_id):
@@ -42,16 +41,23 @@ async def on_reminder(instance_id, reminder):
 	response = await Assistant.get_response(instance)
 	await Client.send_message(instance.unique_id, response)
 
-async def on_message(instance_id, text, images=[], no_response=False):
+async def on_message(instance_id, text, images=None, no_response=False):
+	#TODO: add time taken here
 	DataCollection.add_user_message(text)
 
 	instance = get_instance(instance_id)
-	instance.add_user_message(text)
+	if images:  # TODO: and image modality enabled
+		instance.add_user_message(text, Assistant.encode_image(images))
+	else:
+		instance.add_user_message(text)
 
 	if no_response:
 		return
 
 	if not instance.always_on:
+		return
+
+	if not await AlwaysOn.should_respond(instance.get_context()):
 		return
 
 	await Client.send_indicator(instance, Client.Indicator.GENERATING_RESPONSE)
@@ -63,6 +69,7 @@ async def on_message(instance_id, text, images=[], no_response=False):
 async def set_instance_personality(instance_id, key):
 	instance = get_instance(instance_id)
 	try:
+		instance.set_personality('base')
 		instance.set_personality(key)
 		await Client.send_message(instance.unique_id, f'_Succesfully swapped personality to \'{key}\'_')
 	except:
@@ -88,7 +95,7 @@ async def main():
 	poll_rate = 1
 	try:
 		await Client.init()
-		while True: #TODO: Stupid
+		while True:
 			await TimeManager.poll(on_reminder)
 			await asyncio.sleep(1.0 / poll_rate)
 	finally:

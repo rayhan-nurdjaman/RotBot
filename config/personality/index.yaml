@@ -1,6 +1,7 @@
+base: base.yaml
 alien: alien.yaml
+rotbot: rotbot.yaml
 british: british.yaml
 caveman: caveman.yaml
 classic: classic.yaml
-rotbot: rotbot.yaml
 lockedin: lockedin.yaml

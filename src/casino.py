@@ -29,7 +29,6 @@ def get_top(top=5):
 		return [(row[0], row[1]) for row in rows]
 
 def _init_data():
-	# TODO: Change this to param in constructor
 	os.makedirs("data", exist_ok=True)
 	with sqlite3.connect("data/database.db") as con:
 		cur = con.cursor()

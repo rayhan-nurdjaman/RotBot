@@ -20,10 +20,13 @@ async def get_links(search_term):
 		'q': search_term
 	}
 	async with aiohttp.ClientSession() as session:
-		async with session.get("https://customsearch.googleapis.com/customsearch/v1", params=params) as response:
-			search_results = await response.json()
-			res = [[item['title'], item['link'], item['snippet']] for item in search_results.get('items', [])]
-			return res
+		try:
+			async with session.get("https://customsearch.googleapis.com/customsearch/v1", params=params) as response:
+				search_results = await response.json()
+				res = [[item['title'], item['link'], item['snippet']] for item in search_results.get('items', [])]
+				return res
+		except:
+			return ['Unable to get results']
 
 async def get_text(url, query=None):
 	# TODO: add outbound links
@@ -31,39 +34,52 @@ async def get_text(url, query=None):
 		"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
 	}
 	async with aiohttp.ClientSession() as session:
-		async with session.get(url, headers=headers) as response:
-			html_content = await response.text()
-			soup = BeautifulSoup(html_content, 'html.parser')
-			text = soup.get_text()
-			if query and summarize:
-				system_prompt = [
-					{
-						'role' : 'system',
-						'content' : [
-							{
-								'type' : 'text',
-								'text' : 'Your role is to analyze the content of a website and provide a concise and clear summary based on a specific query. Focus only on information relevant to the query while ignoring irrelevant details or extraneous text.'
-							}
-						]
-					}
+		try:
+			async with session.get(url, headers=headers) as response:
+				html_content = await response.text()
+				soup = BeautifulSoup(html_content, 'html.parser')
+				links = [
+				    {
+				        "url": a_tag['href'],            # Extract raw href attribute
+				        "alias": a_tag.get_text(strip=True)  # Extract display text
+				    }
+				    for a_tag in soup.find_all('a', href=True)
 				]
-				logger.info(f'Querying AI on {link}')
-				user_prompt = [
-					{
-						'role' : 'user',
-						'content' : [
-							{
-								'type' : 'text',
-								'text' : f'Using the provided query and the website content, generate a summary:\nQuery: {query}\nWebsite Content: {text}'
-							}
-						]
-					}
-				]
-				completion = await ChatCompletion.create(system_prompt+user_prompt, 'gpt-4o-mini')
-				text = completion.message.content
-			return text
+				text = soup.get_text()
+				if query and summarize:
+					system_prompt = [
+						{
+							'role' : 'system',
+							'content' : [
+								{
+									'type' : 'text',
+									'text' : 'Your role is to analyze the content of a website and provide a concise and clear summary based on a specific query. Focus only on information relevant to the query while ignoring irrelevant details or extraneous text.'
+								}
+							]
+						}
+					]
+					logger.info(f'Querying AI on {link}')
+					user_prompt = [
+						{
+							'role' : 'user',
+							'content' : [
+								{
+									'type' : 'text',
+									'text' : f'Using the provided query and the website content, generate a summary:\nQuery: {query}\nWebsite Content: {text}'
+								}
+							]
+						}
+					]
+					completion = await ChatCompletion.create(system_prompt+user_prompt, 'gpt-4o-mini')
+					text = completion.message.content
+				return {
+					'text' : text,
+					'links' : links
+				}
+		except:
+			return {'state': 'Unable to fetch website'}
 
-
+# Most common implementation
 # async def search(search_term, query):
 # 	logger.info(f'search_term={search_term}; query={query}')
 # 	links = await get_links(search_term)

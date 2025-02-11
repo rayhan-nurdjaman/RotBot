@@ -39,9 +39,7 @@ async def get_tool_response(instance, tool_name, tool_arguments):
 			tool_response = await SearchEngine.get_links(tool_arguments.get('search_term'))
 		case 'get_url_text':
 			await Client.send_message(instance.unique_id, tool_arguments.get('idle_message'))
-			tool_response = {
-				'text' : await SearchEngine.get_text(tool_arguments.get('url'))
-			}
+			tool_response = await SearchEngine.get_text(tool_arguments.get('url'))
 		case 'set_reminder':
 			await Client.send_indicator(instance, Client.Indicator.REMINDER_CREATED)
 			tool_response = TimeManager.add_reminder(

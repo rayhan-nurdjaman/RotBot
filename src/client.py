@@ -30,6 +30,27 @@ on_message_callback					= None
 toggle_always_on_callback			= None
 set_instance_personality_callback	= None
 
+async def _handle_image(update, context):
+	image_max_res = 512
+	chosen_photo = update.message.photo[-1]
+	for photo_size in update.message.photo[-2::-1]:
+		width = photo_size.width
+		height = photo_size.height
+		min_res = min(width, height)
+		if min_res > image_max_res:
+			chosen_photo = photo_size
+		else:
+			break
+
+	file = await context.bot.get_file(chosen_photo.file_id)
+
+	out_buffer = io.BytesIO()
+	await file.download_to_memory(out_buffer)
+	out_buffer.seek(0)
+	data = out_buffer.read()
+
+	return data
+
 async def init():
 	await application.initialize()
 	await application.updater.start_polling(drop_pending_updates=True)
@@ -41,11 +62,17 @@ async def shutdown():
 	await application.shutdown()
 
 async def send_message(chat_id, message, message_id=None):
-	await application.bot.send_message(
-		chat_id=chat_id,
-		text=message,
-		parse_mode=telegram.constants.ParseMode.MARKDOWN
-	)
+	try:
+		await application.bot.send_message(
+			chat_id=chat_id,
+			text=message,
+			parse_mode=telegram.constants.ParseMode.MARKDOWN
+		)
+	except:
+		await application.bot.send_message(
+			chat_id=chat_id,
+			text=message,
+		)
 
 async def send_client_message(chat_id, message, message_id=None):
 	await send_message(chat_id, f'_{message}_')
@@ -87,36 +114,10 @@ async def on_message(update, context):
 	if not (user_message or photo_url):
 		return
 
-	# TODO: Streamline data collection
-
 	message = f'{username}: ' + reply_prefix + user_message
-	images = await self._handle_image(update, context) if update.message.photo else None
+	images = await _handle_image(update, context) if update.message.photo else None
 
 	await on_message_callback(chat_id, message, images, no_response=False)
-
-# Private functions
-# TODO: Need to figure out what happens when user sends an album
-# This is mainly here to reduce bytes going in and out, as the current backend uses 512px square images
-async def _handle_image(update, context):
-	image_max_res = 512
-	chosen_photo = update.message.photo[-1]
-	for photo_size in update.message.photo[-2::-1]:
-		width = photo_size.width
-		height = photo_size.height
-		min_res = min(width, height)
-		if min_res > image_max_res:
-			chosen_photo = photo_size
-		else:
-			break
-
-	file = await context.bot.get_file(chosen_photo.file_id)
-
-	out_buffer = io.BytesIO()
-	await file.download_to_memory(out_buffer)
-	out_buffer.seek(0)
-	data = out_buffer.read()
-
-	return data
 
 # Commands
 async def sql(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:

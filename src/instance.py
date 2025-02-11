@@ -1,6 +1,7 @@
 import logging
 
 import json
+import tiktoken
 from ruamel.yaml import YAML
 
 logger = logging.getLogger(__name__)
@@ -23,8 +24,8 @@ class Instance:
 		self.unique_id 			= unique_id
 		self.always_on			= True
 		# Personality
-		self.personality		= 'lockedin'
-		self.modalities			= ['text', 'image']
+		self.personality		= 'rotbot'
+		self.modalities			= []
 		self.model 				= None
 		self.system_prompt 		= None
 		self.custom_instruction = None
@@ -37,7 +38,7 @@ class Instance:
 
 		self.zone_offset		= 8
 
-		self._load_config()
+		self.set_personality('base')
 		self.set_personality(self.personality)
 
 	def set_personality(self, key):
@@ -46,13 +47,15 @@ class Instance:
 		with open(file) as stream:
 			yaml = YAML(typ='safe', pure=True)
 			root = yaml.load(stream)
-			self.model = root['model']
-			self.temperature = root['temp']
-			self.context_length = root['context_length']
-			self.custom_instruction = root['custom_instruction']
+			self.model = root['model'] if 'model' in root else self.model
+			self.modalities = root['modalities'] if 'modalities' in root else self.modalities
+			self.temperature = root['temperature'] if 'temperature' in root else self.temperature
+			self.system_prompt = root['system_prompt'] if 'system_prompt' in root else self.system_prompt
+			self.context_length = root['context_length'] if 'context_length' in root else self.context_length
+			self.custom_instruction = root['custom_instruction'] if 'custom_instruction' in root else self.custom_instruction
 
 	def get_context(self):
-		return self._get_system_prompt()+self.context_window
+		return self.get_system_prompt()+self.context_window
 
 	# Adding to context; convenience functions
 	def add_to_context(self, message):
@@ -62,6 +65,14 @@ class Instance:
 		if last_chat['role'] == 'tool':
 			# Remove both tool_calls and tool 
 			self.context_window = self.context_window[1:]
+
+		# encoding = tiktoken.encoding_for_model(self.model)
+		# tokens = encoding.encode("Hello, world!")  # Returns a list of token integers
+		# num_tokens = len(tokens)
+		# while num_tokens > 128000:
+		# 	tokens = encoding.encode("Hello, world!")  # Returns a list of token integers
+		# 	num_tokens = len(tokens)
+
 
 	def add_user_message(self, text, image_url=None):
 		message = {
@@ -76,7 +87,7 @@ class Instance:
 					'text': text
 				}
 			)
-		if image_url and False:
+		if image_url:
 			message['content'].append(
 				{
 					'type': 'image_url',
@@ -93,7 +104,12 @@ class Instance:
 	def add_assistant_message(self, text):
 		message = {
 			'role': 'assistant',
-			'content': text,
+			'content': [
+				{
+					'type': 'text',
+					'text': text	
+				}
+			]
 		}
 
 		self.add_to_context(message)
@@ -102,7 +118,12 @@ class Instance:
 	def add_system_message(self, text):
 		message = {
 			'role': 'system',
-			'content': text,
+			'content': [
+				{
+					'type': 'text',
+					'text': text	
+				}
+			]
 		}
 
 		self.add_to_context(message)
@@ -140,22 +161,19 @@ class Instance:
 	# 		file.write(json.dumps(self.memory, indent=4))
 
 	# Private
-	
-	def _load_config(self):
-		with open('config/base.yaml') as stream:
-			yaml = YAML(typ='safe', pure=True)
-			root = yaml.load(stream)
-			self.model = root['model']
-			self.temperature = root['temp']
-			self.system_prompt = root['system_prompt']
-			self.context_length = root['context_length']
-
-	def _get_system_prompt(self):
+	def get_system_prompt(self):
 		processed_system_prompt = self.system_prompt
 		# processed_system_prompt = processed_system_prompt.replace('MEMORY', self.get_memory(chat_id))
 		return [
 			{
 				'role': 'system', 
-				'content': processed_system_prompt+self.custom_instruction
-			},
+				'content': [
+					{
+						'type': 'text',
+						'text': processed_system_prompt+self.custom_instruction	
+					}
+				]
+			}
 		]
+
+	# def _set_personality(self, path):
