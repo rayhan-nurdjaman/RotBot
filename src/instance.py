@@ -7,6 +7,7 @@ from ruamel.yaml import YAML
 
 from config import config
 from models import DEFAULT_MODEL
+from tools.native import registry # Importing native registers the tools, which the system prompt lists.
 
 logger = logging.getLogger(__name__)
 
@@ -237,7 +238,7 @@ class Instance:
 		}]
 
 	def get_system_prompt(self):
-		processed_system_prompt = self.system_prompt
+		processed_system_prompt = self.system_prompt.replace('{tools}', registry.prompt_section())
 		return [
 			{
 				'role': 'system', 

@@ -129,11 +129,11 @@ def test_tool_list_is_the_same_on_every_step_of_a_turn(instance, monkeypatch):
         seen.append(json.dumps(tools))
         return next(responses)
 
-    async def tool(instance, name, arguments):
+    async def tool(name, arguments, ctx):
         return {}
 
     monkeypatch.setattr(Assistant.ChatCompletion, 'create', create)
-    monkeypatch.setattr(Assistant.ToolManager, 'get_tool_response', tool)
+    monkeypatch.setattr(Assistant.registry, 'call', tool)
     instance.add_user_message('alice: hi')
     asyncio.run(Assistant.get_response(instance))
 

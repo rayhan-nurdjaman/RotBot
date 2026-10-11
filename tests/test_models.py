@@ -157,11 +157,11 @@ def test_model_is_chosen_once_per_tool_loop(tmp_path, monkeypatch):
         used.append(model)
         return next(responses)
 
-    async def tool(instance, name, arguments):
+    async def tool(name, arguments, ctx):
         return {}
 
     monkeypatch.setattr(Assistant.ChatCompletion, 'create', create)
-    monkeypatch.setattr(Assistant.ToolManager, 'get_tool_response', tool)
+    monkeypatch.setattr(Assistant.registry, 'call', tool)
     asyncio.run(Assistant.get_response(instance))
 
     assert used == [parse_model('haiku-5.5-low')] * 2
@@ -261,11 +261,11 @@ def test_requests_never_end_with_an_assistant_turn_after_a_tool_round_or_forced_
         roles.append(messages[-1]['role'])
         return SimpleNamespace(finish_reason='tool_calls', message=SimpleNamespace(content=None, tool_calls=[tool_call]))
 
-    async def tool(instance, name, arguments):
+    async def tool(name, arguments, ctx):
         return {}
 
     monkeypatch.setattr(Assistant.ChatCompletion, 'create', create)
-    monkeypatch.setattr(Assistant.ToolManager, 'get_tool_response', tool)
+    monkeypatch.setattr(Assistant.registry, 'call', tool)
     asyncio.run(Assistant.get_response(instance))
 
     assert roles[0] == 'user'

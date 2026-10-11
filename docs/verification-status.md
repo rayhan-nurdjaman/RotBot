@@ -17,6 +17,7 @@ What has been proven, and how. Use this to decide how much to trust a piece of b
 |---|---|
 | The three pinned slugs exist and answer through the `openai` SDK | One request per model |
 | A tool-call round trip works on Haiku, Sonnet and Opus, including **parallel** tool calls (two calls in one response) | Real turns with `get_time` plus `save_to_memory`, and with `get_time` plus `set_reminder` |
+| Registry-generated strict schemas (all five tools) are accepted, and a `get_time` call returns `{"ok": true, ...}` to the model on Haiku | One real turn after the registry change (`web_search`, `get_url_text`, `set_reminder` not exercised live) |
 | `reasoning: {"effort": ...}` is accepted; the usage object includes `reasoning_tokens`, `cached_tokens`, `cache_write_tokens`, `cost` | Real responses |
 | Haiku returns `reasoning_details` on tool-call responses and the API accepts them sent back unchanged on the next request in the loop | Two consecutive tool rounds with reasoning returned and replayed |
 | Sonnet and Opus mostly did **not** return `reasoning_details` at low and medium effort | Observed, not exhaustive |
@@ -44,12 +45,12 @@ What has been proven, and how. Use this to decide how much to trust a piece of b
 | `send_message`: Markdown rejection retries as plain text; empty text and over-4096 text raise after the retry | Stand-in bot |
 | A new `Instance` runs as `base`, not `rotbot`; a failed `/schizo` resets the chat to base | Run |
 | `poll()` raises `RuntimeError: dictionary changed size during iteration` and an `on_reminder` exception escapes it | Run |
-| `get_url_text` on a large page returns about 92,000 characters and 2,241 links; `web_search` without Google keys returns `["Unable to get results"]` | Run against live websites |
+| `get_url_text` on a large page returns about 92,000 characters and 2,241 links; `web_search` without Google keys fails (now reported as `ok: false`, previously `["Unable to get results"]`) | Run against live websites |
 | `client.on_message`: `None` usernames become `"None: "`, `from_user=None` and a reply to a sender-less message raise | Run with fake updates |
 
 ## Covered by tests (Test)
 
-110 tests, see [`contributing.md`](contributing.md). They prove the logic given fakes: grouping and ordering of tool rounds, the step cap, every finish reason branch, each error mapping, tool timeouts, malformed arguments, the lock, trimming never leaving an orphan, chunked trimming, request ordering and breakpoint placement, no `temperature`, the typing task lifecycle, reasoning kept and dropped, memory persistence, reminders firing once, command behaviour, the `llm_call` fields.
+126 tests, see [`contributing.md`](contributing.md). They prove the logic given fakes: grouping and ordering of tool rounds, the step cap, every finish reason branch, each error mapping, tool timeouts, malformed arguments, the lock, trimming never leaving an orphan, chunked trimming, request ordering and breakpoint placement, no `temperature`, the typing task lifecycle, reasoning kept and dropped, memory persistence, reminders firing once, command behaviour, the `llm_call` fields.
 
 **Tests cannot prove** that Telegram, OpenRouter or the provider cache behave as assumed. That is what the Live list is for.
 

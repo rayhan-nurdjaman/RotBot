@@ -2,6 +2,7 @@ aiohttp==3.11.10
 beautifulsoup4==4.12.3
 openai==1.59.7
 Pillow==11.1.0
+pydantic==2.14.0
 python-dotenv==1.0.1
 python-telegram-bot==21.10
 ruamel.yaml==0.19.1

@@ -66,11 +66,11 @@ A persona file may omit any key; omitted keys keep the value from the previously
 
 `/schizo <name>` (via `main.set_instance_personality`) loads `base` first, then the requested persona, so that traits from a previous persona do not stack. It does **not** clear the conversation history. Earlier messages written in the old persona stay in the context and can influence the new one (few-shot contamination; the README TODO mentions compaction as a future idea). On an unknown name it replies `The personality '<name>' does not exist.` but, because the function sets `instance.personality` and loads `base` before it looks the name up, **the chat has by then been reset to base and its `personality` attribute holds the unknown name** (verified; see known-issues item 4).
 
-The system prompt text itself contains: identity and role (RotBot, username `rotrot_botbot`, replies in group chats formatted as `<username>: <message>`), brevity and Markdown guidance, a source-citing format, a capabilities list (vision at 512 by 512), a numbered tool list, and a memory paragraph pointing to the trailing `API: Current memory` message. When you add or remove a tool, update that list by hand.
+The system prompt text itself contains: identity and role (RotBot, username `rotrot_botbot`, replies in group chats formatted as `<username>: <message>`), brevity and Markdown guidance, a source-citing format, a capabilities list (vision at 512 by 512), a `# Tools` section, and a memory paragraph pointing to the trailing `API: Current memory` message. The `# Tools` section is the placeholder `{tools}` in `base.yaml`, replaced in `Instance.get_system_prompt` by the list generated from the tool registry (see [`tools.md`](tools.md)). Nothing to update by hand when a tool changes.
 
-## `config/tools.json`
+## Tool schemas
 
-The tool schemas sent to the model, in OpenAI function-calling format. See [`tools.md`](tools.md). Read once when `assistant.py` is imported into the module variable `assistant.tools`.
+There is no `config/tools.json` any more. The schemas are generated from the `@tool` functions at import time (module variable `assistant.tools`). See [`tools.md`](tools.md).
 
 ## Chat commands
 

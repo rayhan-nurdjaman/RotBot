@@ -2,8 +2,9 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 
 import main
-import tool_manager as ToolManager
 from tools import time_manager as TimeManager
+from tools.native import registry
+from tools.registry import ToolContext
 
 
 def local_args(dt, description='call mom'):
@@ -18,20 +19,28 @@ def zone_now():
     return datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=TimeManager.zone_offset))).replace(tzinfo=None)
 
 
-def test_set_reminder_tool_stores_it_and_returns_a_dict(monkeypatch):
+def test_set_reminder_tool_stores_it_and_returns_ok(monkeypatch):
     monkeypatch.setattr(TimeManager, 'reminders', {})
 
-    async def indicator(instance, indicator):
-        pass
-
-    monkeypatch.setattr(ToolManager.Client, 'send_indicator', indicator)
     instance = main.Instance('chat-1')
 
-    result = asyncio.run(ToolManager.get_tool_response(
-        instance, 'set_reminder', local_args(zone_now() + timedelta(hours=1))))
+    result = asyncio.run(registry.call(
+        'set_reminder', local_args(zone_now() + timedelta(hours=1)), ToolContext(instance, None)))
 
+    assert result['ok'] is True
     assert result['state'] == 'Reminder successfully created'
     assert len(TimeManager.reminders['chat-1']) == 1
+
+
+def test_set_reminder_with_an_impossible_date_is_a_failed_result(monkeypatch):
+    monkeypatch.setattr(TimeManager, 'reminders', {})
+    args = local_args(zone_now() + timedelta(hours=1))
+    args['month'] = 13
+
+    result = asyncio.run(registry.call('set_reminder', args, ToolContext(main.Instance('chat-1'), None)))
+
+    assert result == {'ok': False, 'error': 'Failed to create reminder due to invalid parameters.'}
+    assert TimeManager.reminders == {}
 
 
 def test_due_reminder_fires_once_and_future_one_does_not(monkeypatch):

@@ -8,14 +8,15 @@ import openai
 from PIL import Image
 
 from config import config
-import tool_manager as ToolManager
+from tools.native import registry
+from tools.registry import ToolContext
+import client as Client
 import chat_completion as ChatCompletion
 import router as Router
 
 logger = logging.getLogger(__name__)
 
-with open('config/tools.json') as tools_file:
-	tools = json.loads(tools_file.read())
+tools = registry.schemas()
 
 max_tool_steps = config['max_tool_steps']
 tool_timeout = config['tool_timeout_s']
@@ -75,16 +76,18 @@ async def _process_tool_call(instance, tool_call):
 	try:
 		tool_arguments = json.loads(tool_call.function.arguments) # Dict
 	except json.JSONDecodeError as e:
-		return tool_call_id, tool_name, {}, {'error': f'Invalid JSON in tool arguments: {e}'}
+		return tool_call_id, tool_name, {}, {'ok': False, 'error': f'Invalid JSON in tool arguments: {e}'}
 
 	try:
-		tool_response = await asyncio.wait_for(ToolManager.get_tool_response(instance, tool_name, tool_arguments), tool_timeout)
+		logger.info(f'{tool_name} tool called.')
+		ctx = ToolContext(instance=instance, client=Client)
+		tool_response = await asyncio.wait_for(registry.call(tool_name, tool_arguments, ctx), tool_timeout)
 	except asyncio.TimeoutError:
 		logger.error(f'{tool_name} tool timed out after {tool_timeout}s.')
-		tool_response = {'error': f'The tool timed out after {tool_timeout} seconds.'}
+		tool_response = {'ok': False, 'error': f'The tool timed out after {tool_timeout} seconds.'}
 	except Exception as e:
 		logger.exception(f'{tool_name} tool failed.')
-		tool_response = {'error': f'{type(e).__name__}: {e}'}
+		tool_response = {'ok': False, 'error': f'{type(e).__name__}: {e}'}
 	return tool_call_id, tool_name, tool_arguments, tool_response
 
 # Handles every finish reason other than a tool call: stop, length, content_filter, error and anything unknown.

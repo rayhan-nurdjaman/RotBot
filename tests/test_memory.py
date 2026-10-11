@@ -2,8 +2,9 @@ import asyncio
 
 import pytest
 
-import tool_manager as ToolManager
 from instance import Instance
+from tools.native import registry
+from tools.registry import ToolContext
 
 
 @pytest.fixture(autouse=True)
@@ -23,9 +24,9 @@ def request_text(instance):
 
 def test_saved_memory_is_visible_to_a_fresh_instance_of_the_same_chat():
     first = Instance('chat-1')
-    result = asyncio.run(ToolManager.get_tool_response(first, 'save_to_memory', {'user_info': 'alice likes tea'}))
+    result = asyncio.run(registry.call('save_to_memory', {'user_info': 'alice likes tea'}, ToolContext(first, None)))
 
-    assert isinstance(result, dict)
+    assert result['ok'] is True
     assert result['memory'] == 'alice likes tea'
 
     fresh = Instance('chat-1')

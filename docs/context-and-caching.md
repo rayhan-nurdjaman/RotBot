@@ -18,7 +18,7 @@ Implemented in `src/instance.py`. Request assembly happens in `Instance.get_cont
 | Part | Source | Changes between requests? |
 |---|---|---|
 | System message | `get_system_prompt()`: `system_prompt` (from `base.yaml`) + `custom_instruction` (from the persona) | Only on `/schizo`. **Never** per request. |
-| Tool list | `config/tools.json`, sent as the `tools` parameter | Never. |
+| Tool list | the tool registry (`registry.schemas()`), sent as the `tools` parameter | Never. |
 | History | `context_window` | Append-only, except when trimmed (see below). |
 | Memory message | `get_volatile_messages()` | When memory is saved. Always last. |
 
@@ -125,7 +125,7 @@ The base system prompt plus the tool list is about 1900 tokens, comfortably abov
 | `/schizo <name>` | System prompt changes, whole prefix is new. Intentional. |
 | A trim (every few messages, see above) | One request with a new front. Expected. |
 | Model change (`/model`, auto-route) | Caches are per model; first request on the new model is a write. |
-| Editing `config/tools.json` or a personality while the bot runs | Only affects new `Instance`s and a restart. |
+| Adding a tool or editing a personality while the bot runs | Only affects new `Instance`s and a restart. |
 | Putting per-request data (time, memory, usernames) into the system prompt | **Breaks caching on every request.** Put it in `get_volatile_messages()`. |
 
 ## Reasoning blocks in the context

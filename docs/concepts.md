@@ -48,7 +48,7 @@ Each rule says why. Do not break one without reading its reason.
 ### Behaviour rules
 
 12. **One turn at a time per chat.** `assistant.get_response` holds `instance.lock` for the whole turn. Without it, two quick messages interleave their tool rounds in one context.
-13. **Tools never raise out of a turn.** `assistant._process_tool_call` catches everything and returns `{"error": ...}` to the model so it can recover. A tool that raises would otherwise kill the turn.
+13. **Tools never raise out of a turn.** `assistant._process_tool_call` catches everything and returns `{"ok": false, "error": ...}` to the model so it can recover. A tool that raises would otherwise kill the turn.
 14. **A failed LLM call leaves the user's message in the context**, and nothing is stored for the failed reply, so the user can simply retry.
 15. **Reasoning text is never sent to the chat.** Users only see the typing indicator.
 16. **Messages from the model are not trusted as HTML or Markdown-safe.** `client.send_message` tries Markdown and falls back to plain text if Telegram rejects it.

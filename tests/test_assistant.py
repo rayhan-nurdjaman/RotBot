@@ -54,11 +54,11 @@ def instance(tmp_path, monkeypatch):
 
 
 def install(monkeypatch, llm, tool_fn=None):
-    async def default_tool(instance, name, arguments):
+    async def default_tool(name, arguments, ctx):
         return {'tool': name, 'args': arguments}
 
     monkeypatch.setattr(Assistant.ChatCompletion, 'create', llm.create)
-    monkeypatch.setattr(Assistant.ToolManager, 'get_tool_response', tool_fn or default_tool)
+    monkeypatch.setattr(Assistant.registry, 'call', tool_fn or default_tool)
 
 
 def roles(instance):
@@ -79,7 +79,7 @@ def test_parallel_tool_calls_are_grouped_in_order(instance, monkeypatch):
 
 
 def test_results_keep_call_order_even_if_tools_finish_out_of_order(instance, monkeypatch):
-    async def slow_first(instance, name, arguments):
+    async def slow_first(name, arguments, ctx):
         await asyncio.sleep(0.02 if arguments['n'] == 1 else 0)
         return {'n': arguments['n']}
 
@@ -141,19 +141,19 @@ def test_refusal_on_a_stop_with_no_content_is_reported_as_a_refusal(instance, mo
 
 
 def test_tool_exception_is_returned_to_the_model(instance, monkeypatch):
-    async def boom(instance, name, arguments):
+    async def boom(name, arguments, ctx):
         raise RuntimeError('kaput')
 
     install(monkeypatch, FakeLLM([tool_calls_response(tool_call('a')), final_response('recovered')]), boom)
 
     assert asyncio.run(Assistant.get_response(instance)) == 'recovered'
-    assert json.loads(instance.context_window[1]['content']) == {'error': 'RuntimeError: kaput'}
+    assert json.loads(instance.context_window[1]['content']) == {'ok': False, 'error': 'RuntimeError: kaput'}
 
 
 def test_malformed_json_arguments_are_returned_to_the_model(instance, monkeypatch):
     called = []
 
-    async def tool(instance, name, arguments):
+    async def tool(name, arguments, ctx):
         called.append(name)
         return {}
 
@@ -224,18 +224,18 @@ def test_error_mid_tool_loop_does_not_leave_a_half_written_round(instance, monke
         except StopIteration:
             raise api_error(openai.InternalServerError, 503)
 
-    async def tool(instance, name, arguments):
+    async def tool(name, arguments, ctx):
         return {}
 
     monkeypatch.setattr(Assistant.ChatCompletion, 'create', create)
-    monkeypatch.setattr(Assistant.ToolManager, 'get_tool_response', tool)
+    monkeypatch.setattr(Assistant.registry, 'call', tool)
 
     assert asyncio.run(Assistant.get_response(instance)) == Assistant.PROVIDER_MESSAGE
     assert roles(instance) == ['assistant', 'tool']
 
 
 def test_slow_tool_times_out_and_the_model_gets_an_error(instance, monkeypatch):
-    async def hang(instance, name, arguments):
+    async def hang(name, arguments, ctx):
         await asyncio.sleep(10)
 
     monkeypatch.setattr(Assistant, 'tool_timeout', 0.01)
@@ -246,7 +246,7 @@ def test_slow_tool_times_out_and_the_model_gets_an_error(instance, monkeypatch):
 
 
 def test_one_slow_tool_does_not_block_the_others_from_returning(instance, monkeypatch):
-    async def tool(instance, name, arguments):
+    async def tool(name, arguments, ctx):
         if arguments['slow']:
             await asyncio.sleep(10)
         return {'ok': True}

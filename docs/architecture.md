@@ -8,13 +8,14 @@ All code is in `src/`. Modules import each other by bare name (`import client as
 |---|---|---|
 | `src/main.py` | Entry point, composition, and all chat-level logic: instance registry, message and reminder handlers, command handlers, the reminder polling loop. | `client`, `assistant`, `always_on`, `instance`, `models`, `tools.time_manager` |
 | `src/client.py` | Everything Telegram: receives updates, sends messages, typing indicator, registers handlers. Calls back into `main` through module-level callback variables. **Builds the Telegram `Application` at import time**, so `TELEGRAM_API_KEY` must be set before importing it. | none |
-| `src/assistant.py` | The agent loop: calls the model, runs tools, stores tool rounds, handles errors and finish reasons. Also `encode_image`. | `chat_completion`, `config`, `router`, `tool_manager` |
+| `src/assistant.py` | The agent loop: calls the model, runs tools, stores tool rounds, handles errors and finish reasons. Also `encode_image`. | `chat_completion`, `config`, `router`, `client`, `tools.native`, `tools.registry` |
 | `src/chat_completion.py` | The only module that talks to OpenRouter. Builds the request, logs one `llm_call` line per call. | `config` |
 | `src/instance.py` | The `Instance` class: conversation storage, trimming, request assembly, personality loading, memory persistence. | `config`, `models` |
 | `src/models.py` | The model catalogue (pinned slugs), effort levels, `ModelSpec`, `parse_model`. | none |
 | `src/router.py` | `route(instance)`: stub that picks a model spec when auto routing is on. | `models` |
 | `src/always_on.py` | `should_respond(context)`: stub that always returns `True`. | none |
-| `src/tool_manager.py` | Dispatches a tool call (by name) to its implementation. | `client`, `tools.*` |
+| `src/tools/registry.py` | The tool registry: `@tool` decorator, schema generation, Pydantic argument validation, the standard result shape, `ToolContext`, `ToolError`. | `pydantic` |
+| `src/tools/native.py` | The built-in tools (`save_to_memory`, `web_search`, `get_url_text`, `get_time`, `set_reminder`). Importing it registers them. | `registry`, `time_manager`, `search_engine` |
 | `src/tools/time_manager.py` | `get_time`, `add_reminder`, the in-memory reminder store and `poll`. | none |
 | `src/tools/search_engine.py` | `get_links` (Google Custom Search) and `get_text` (fetch and parse a page). | none |
 | `src/config.py` | Loads `config/config.yaml` into the dict `config`. | none |
@@ -35,10 +36,12 @@ flowchart TD
     client -. callbacks .-> main
     assistant --> chat_completion[chat_completion.py]
     assistant --> router[router.py]
-    assistant --> tool_manager[tool_manager.py]
-    tool_manager --> client
-    tool_manager --> time_manager
-    tool_manager --> search_engine[tools/search_engine.py]
+    assistant --> registry[tools/registry.py]
+    assistant --> native[tools/native.py]
+    instance --> native
+    native --> registry
+    native --> time_manager
+    native --> search_engine[tools/search_engine.py]
     instance --> models[models.py]
     router --> models
     chat_completion --> config[config.py]
@@ -49,13 +52,13 @@ flowchart TD
 Two things to notice:
 
 - `client` never imports `main`. It calls **callbacks** that `main.main()` assigns at startup (`Client.on_message_callback = on_message`, and so on). This is why `client` can be tested without `main`.
-- `tool_manager` imports `client` to send messages and indicators from inside tools. That is a real coupling (a tool needs a Telegram client). Keep it in mind when adding tools.
+- Tools do not import `client`. `assistant` hands each tool a `ToolContext` that carries the instance and the `client` module, so a tool talks to the chat through `ctx.client`. `instance` imports `tools.native` so the system prompt can list the registered tools.
 
 ## Startup sequence (`python src/main.py`)
 
 1. `main.py` configures logging (to `app.log` and stdout).
 2. `load_dotenv()` reads `.env`.
-3. Imports run. **Importing `client` creates the Telegram `Application` immediately**, which raises `telegram.error.InvalidToken` if `TELEGRAM_API_KEY` is missing or empty. Importing `chat_completion` creates the OpenAI client pointed at OpenRouter. Importing `assistant` reads `config/tools.json`. Importing `instance` reads `config/personality/index.yaml`.
+3. Imports run. **Importing `client` creates the Telegram `Application` immediately**, which raises `telegram.error.InvalidToken` if `TELEGRAM_API_KEY` is missing or empty. Importing `chat_completion` creates the OpenAI client pointed at OpenRouter. Importing `tools.native` registers the tools, and `assistant` builds the tool list from the registry. Importing `instance` reads `config/personality/index.yaml`.
 4. `main()` assigns the five callbacks on `client`, then `Client.init()` starts polling Telegram.
 5. A loop runs forever: `TimeManager.poll(on_reminder)` then sleep 1 second.
 6. On exit, `Client.shutdown()`.
@@ -72,7 +75,7 @@ sequenceDiagram
     participant I as Instance
     participant A as assistant.get_response
     participant LLM as chat_completion / OpenRouter
-    participant T as tool_manager
+    participant T as tools.registry
     TG->>C: update
     C->>C: ignore if no message / no text and no photo
     C->>M: on_message_callback(chat_id, "user: text", image_bytes)
@@ -120,13 +123,13 @@ The reminder path is the same from step 2: `main.on_reminder` adds an `API: The 
 | `main` to `Instance` | `add_user_message(text, image_data_url)` where the image is a `data:image/jpeg;base64,...` string. |
 | `assistant` to `chat_completion` | `(messages: list[dict], model: ModelSpec, tools: list[dict], chat_id, tool_choice)` |
 | `chat_completion` to OpenRouter | OpenAI Chat Completions JSON plus OpenRouter fields. See [`models-and-openrouter.md`](models-and-openrouter.md). |
-| `assistant` to `tool_manager` | `(instance, tool_name: str, arguments: dict)`; returns a JSON-serialisable value (`dict` or `list`). |
+| `assistant` to `registry` | `registry.call(name: str, arguments: dict, ctx: ToolContext)`; returns `{"ok": true, ...}` or `{"ok": false, "error": str}`. |
 
 ## Extension points
 
 | To change | Edit | Read |
 |---|---|---|
-| Add or change a tool | `config/tools.json` (schema), `src/tool_manager.py` (dispatch), a module in `src/tools/` | [`tools.md`](tools.md) |
+| Add or change a tool | a `@tool` function in `src/tools/native.py` (schema, dispatch and prompt text are generated) | [`tools.md`](tools.md) |
 | Change how the model is chosen per turn | `src/router.py` (keep the signature) | [`models-and-openrouter.md`](models-and-openrouter.md) |
 | Change when the bot replies | `src/always_on.py` | `main.on_message` |
 | Add a personality | a YAML in `config/personality/` plus an entry in `index.yaml` | [`configuration.md`](configuration.md) |

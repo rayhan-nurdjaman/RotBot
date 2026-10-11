@@ -1,6 +1,6 @@
 # Known issues and traps
 
-Everything here was **reproduced or read directly in the code** on commit `71bbe7d`, unless marked *inferred*. Items are ordered by how likely they are to hurt. None of these are tracked as GitHub issues unless a number is given. If you fix one, delete it here.
+Everything here was **reproduced or read directly in the code** on commit `71bbe7d` (items marked fixed since then are removed), unless marked *inferred*. Items are ordered by how likely they are to hurt. None of these are tracked as GitHub issues unless a number is given. If you fix one, delete it here.
 
 ## Bugs (wrong behaviour today)
 
@@ -46,15 +46,11 @@ No chat allow-list and no per-user permissions anywhere. Anyone who finds the bo
 
 ### 7. Long or empty replies can fail to send
 
-`client.send_message` has no splitting. A reply over 4096 characters or an empty reply raises `telegram.error.BadRequest` after the plain-text retry (verified). The raise is not caught in `main.on_message`; the reply is lost and already stored in the context as if sent. `max_tokens` is 16000, so a long answer can exceed the limit. Empty replies are rare because `_finish` substitutes a fallback message for empty content, but an `idle_message` from the model can be empty (see [`tools.md`](tools.md)).
+`client.send_message` has no splitting. A reply over 4096 characters or an empty reply raises `telegram.error.BadRequest` after the plain-text retry (verified). The raise is not caught in `main.on_message`; the reply is lost and already stored in the context as if sent. `max_tokens` is 16000, so a long answer can exceed the limit. Empty replies are rare because `_finish` substitutes a fallback message for empty content.
 
 ### 8. Users without usernames are indistinguishable (and one case crashes)
 
 The speaker name in history is the Telegram `username`. It is `None` for users who have none (text becomes `None: hi`), and two such users look identical to the model. A message with `from_user is None` (anonymous group admin) or a reply to a message with no sender raises `AttributeError` in `client.on_message` (verified). Memory is per chat, so facts saved about "alice" in a group are visible to everyone in it.
-
-### 9. Unknown tool name returns `None`
-
-`tool_manager.get_tool_response` has no `case _`. Calling an undefined tool stores `null` as the result. Strict schemas make this very unlikely.
 
 ## Surprises (behave as written, but not what you would assume)
 

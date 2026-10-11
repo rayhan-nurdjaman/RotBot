@@ -136,11 +136,11 @@ def install(monkeypatch, responses):
         sent_requests.append(json.loads(json.dumps(messages)))
         return next(queue)
 
-    async def tool(instance, name, arguments):
+    async def tool(name, arguments, ctx):
         return {}
 
     monkeypatch.setattr(Assistant.ChatCompletion, 'create', create)
-    monkeypatch.setattr(Assistant.ToolManager, 'get_tool_response', tool)
+    monkeypatch.setattr(Assistant.registry, 'call', tool)
     return sent_requests
 
 

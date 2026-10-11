@@ -71,9 +71,9 @@ Exceptions that are not `openai.APIError` (a bug in this repo) propagate to the 
 
 The tool calls of one response run **concurrently** with `asyncio.gather`; each is wrapped so it never raises:
 
-1. `json.loads(arguments)`. On `JSONDecodeError`: the call is not executed, `{}` is stored as its arguments, and `{"error": "Invalid JSON in tool arguments: ..."}` is its result.
-2. `asyncio.wait_for(tool_manager.get_tool_response(...), tool_timeout_s)` (30 s). On timeout the coroutine is cancelled and the result is `{"error": "The tool timed out after 30 seconds."}`. Cancellation only takes effect at an `await`: a tool that blocks synchronously cannot be interrupted.
-3. Any other exception: logged with a traceback, result is `{"error": "<ExceptionType>: <message>"}`.
+1. `json.loads(arguments)`. On `JSONDecodeError`: the call is not executed, `{}` is stored as its arguments, and `{"ok": false, "error": "Invalid JSON in tool arguments: ..."}` is its result.
+2. `asyncio.wait_for(registry.call(name, arguments, ToolContext(...)), tool_timeout_s)` (30 s). The registry validates arguments and wraps the result (see [`tools.md`](tools.md)). On timeout the coroutine is cancelled and the result is `{"ok": false, "error": "The tool timed out after 30 seconds."}`. Cancellation only takes effect at an `await`: a tool that blocks synchronously cannot be interrupted.
+3. Any other exception: logged with a traceback, result is `{"ok": false, "error": "<ExceptionType>: <message>"}`.
 
 The model sees the error as the tool result and can recover (retry, explain, try another tool). One slow tool does not delay the others' results being recorded beyond the longest timeout.
 

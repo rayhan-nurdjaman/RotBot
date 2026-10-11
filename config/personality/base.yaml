@@ -27,18 +27,7 @@ system_prompt       : |
     - Tool Chaining: You can call multiple tools in sequence to accomplish multi-step tasks.
 
     # Tools
-    1. save_to_memory
-    - Stores non-sensitive user information (e.g., general preferences or hobbies).
-    2. web_search
-    - Searches the web to find relevant websites when needed. Returns a list of website urls and their metadata.
-    3. get_url_text
-    - Retrieves full text from a specific URL for detailed or up-to-date information as well as any outbound links.  
-    - Use this tool after getting the urls from 'web_search' if further detail is needed. Can also be chained if the retrieved page has additional links. 
-    4. get_time
-    - Retrieves the current time (useful for reminders or time-sensitive tasks).
-    5. set_reminder
-    - Schedules a reminder (always invoke 'get_time' first to ensure accuracy).
-    - Do not call this in parallel to 'get_time'. Wait for the response of 'get_time' first.
+    {tools}
 
     # Memory
     - You maintain a memory of user details for personalization.

@@ -29,7 +29,7 @@ Logs go to stdout and `app.log`. Stop with Ctrl-C. A bot token must exist (creat
 ## Tests
 
 ```sh
-env/bin/python -m pytest -q               # 110 tests, about 1 second, no network
+env/bin/python -m pytest -q               # 126 tests, about 1 second, no network
 env/bin/python -m pyflakes src tests      # expect exactly 3 pre-existing warnings in src/
 ```
 
@@ -44,8 +44,9 @@ Layout (`tests/`):
 | `test_models.py` | `parse_model`, the request body, `/model`, `/autoroute`, routing, "request never ends with an assistant message" |
 | `test_typing_and_reasoning.py` | Typing task lifecycle, reasoning kept within a loop and dropped between turns |
 | `test_logging.py` | The `llm_call` line, image-only message logging |
+| `test_registry.py` | Registry: schema generation, strict mode, validation, result shape, prompt section |
 | `test_memory.py` | Memory save, per-chat isolation, persistence, trailing-message placement |
-| `test_reminders.py` | Setting, firing once, `on_reminder` |
+| `test_reminders.py` | Setting (including an impossible date), firing once, `on_reminder` |
 | `test_client.py` | Stickers and photo failures in `client.on_message` |
 | `test_main.py` | `get_instance`, unknown personality, always-on stub |
 
@@ -93,7 +94,7 @@ The `llm_call` line shows tokens, `cached_tokens` and `cost`. To test caching, s
 
 - `src/` uses **tabs**, short comments that explain *why*, and the callback pattern in [`architecture.md`](architecture.md). Match the surrounding file; do not reformat code you are not changing.
 - Module aliases are capitalised (`import client as Client`).
-- Error handling: tools return `{"error": ...}` or `{"state": ...}`; the loop never lets a tool exception escape; API errors map to short user messages in `assistant.py`.
+- Error handling: tools return a dict (wrapped as `{"ok": true, ...}`) or raise `ToolError` (becomes `{"ok": false, "error": ...}`); the loop never lets a tool exception escape; API errors map to short user messages in `assistant.py`.
 - New behaviour needs a test with fakes. New request-level behaviour also needs a note in these docs and, ideally, a live check recorded in [`verification-status.md`](verification-status.md).
 - Commit messages: a short imperative subject, then a body explaining why; reference the issue (#N). Work happens on the `overhaul` branch.
 
