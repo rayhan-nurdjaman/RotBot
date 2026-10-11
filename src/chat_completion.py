@@ -70,6 +70,8 @@ class CompletionStream:
 openai_client = openai.AsyncOpenAI(
 	base_url='https://openrouter.ai/api/v1',
 	api_key=os.getenv('OPENROUTER_API_KEY'),
+	timeout=config['llm_timeout_s'],
+	max_retries=config['llm_max_retries'],
 )
 
 # model: a models.ModelSpec (slug + reasoning effort). chat_id is the stable id used for provider-sticky
