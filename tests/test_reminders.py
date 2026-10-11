@@ -39,11 +39,6 @@ def db_path(tmp_path):
     return str(tmp_path / 'rotbot.db')
 
 
-@pytest.fixture(autouse=True)
-def isolated_memory_file(tmp_path, monkeypatch):
-    monkeypatch.setattr('instance.memory_file', str(tmp_path / 'memory.json'))
-
-
 def with_db(path):
     """Runs an async test body with an open database, closing it afterwards."""
     def decorator(body):

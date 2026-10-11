@@ -48,8 +48,7 @@ class FakeLLM:
 
 
 @pytest.fixture
-def instance(tmp_path, monkeypatch):
-    monkeypatch.setattr('instance.memory_file', str(tmp_path / 'memory.json'))
+def instance():
     return Instance('test')
 
 

@@ -26,6 +26,18 @@ MIGRATIONS = [
 	);
 	CREATE INDEX reminders_pending ON reminders (status, attempt_at);
 	''',
+	# 2: memories, per chat. created_by is reserved for the sender and not filled in yet (see docs/known-issues.md).
+	# Vector search would add an embedding column here in a later migration.
+	'''
+	CREATE TABLE memories (
+		id			INTEGER PRIMARY KEY,
+		chat_id		INTEGER NOT NULL,
+		created_by	TEXT,
+		text		TEXT NOT NULL,
+		created_at	INTEGER NOT NULL
+	);
+	CREATE INDEX memories_chat ON memories (chat_id, id);
+	''',
 ]
 
 _connection = None

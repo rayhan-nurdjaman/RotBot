@@ -1,14 +1,7 @@
 from datetime import datetime, timezone
 
-import pytest
-
 import clock as Clock
 from instance import Instance
-
-
-@pytest.fixture(autouse=True)
-def isolated_memory_file(tmp_path, monkeypatch):
-    monkeypatch.setattr('instance.memory_file', str(tmp_path / 'memory.json'))
 
 
 def fix_time(monkeypatch, *args):

@@ -33,7 +33,7 @@ def test_init_creates_the_folder_the_file_and_the_schema(tmp_path):
     run(go())
 
     assert run(user_version(path)) == len(db.MIGRATIONS)
-    assert 'reminders' in run(tables(path))
+    assert {'reminders', 'memories'} <= run(tables(path))
 
 
 def test_opening_twice_is_idempotent_and_keeps_data(tmp_path):

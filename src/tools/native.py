@@ -4,6 +4,7 @@ from typing import Annotated
 from pydantic import Field
 
 import clock as Clock
+import memories as Memories
 import reminders as Reminders
 from tools.registry import registry, tool, ToolError
 
@@ -30,9 +31,29 @@ registry.server_tool(
 # of the system prompt. Put when to use it and how it combines with other tools in there.
 
 @tool
-async def save_to_memory(ctx, user_info: Annotated[str, Field(description='The information to store, provided as a complete sentence.')]):
-	"""Stores non-sensitive user information (e.g., general preferences or hobbies) to enhance future responses and interactions."""
-	return ctx.instance.add_memory(user_info)
+async def save_memory(ctx, text: Annotated[str, Field(description='One complete sentence that makes sense on its own. Include the username of the person it is about, e.g. "alice prefers tea over coffee".')]):
+	"""Saves something to this chat's memory, so it is remembered in later conversations. Memory is shared by everyone in the chat.
+	Use it for lasting facts and preferences (hobbies, likes, projects) and for standing instructions about how to reply in this chat (a tone, a style, a language).
+	Never save passwords, keys, card or ID numbers, or anything else sensitive. Do not save small talk or things that will soon be outdated.
+	Saved memories are listed at the start of the conversation. Do not save one twice; to change one, forget_memory the old one and save the new one."""
+	try:
+		memory_id, created = await Memories.add(ctx.chat_id, text)
+	except Memories.Rejected as e:
+		raise ToolError(str(e))
+	return {'id': memory_id, 'text': text, 'already_saved': not created}
+
+@tool
+async def recall_memory(ctx, query: Annotated[str, Field(description='Words to look for, e.g. "tea coffee". An empty string returns the newest memories.')]):
+	"""Searches this chat's saved memories. The newest ones are already listed at the start of the conversation, so use this when the user asks what you remember, or when you need something that is not listed there (older memories are noted as hidden).
+	Returns each match with its id."""
+	return {'memories': await Memories.search(ctx.chat_id, query)}
+
+@tool
+async def forget_memory(ctx, id: Annotated[int, Field(description='The id of the memory, shown in brackets in the memory list or returned by recall_memory.')]):
+	"""Deletes one saved memory of this chat, for example when the user asks you to forget something or a fact is no longer true."""
+	if not await Memories.delete(ctx.chat_id, id):
+		raise ToolError(f'There is no memory with id {id} in this chat.')
+	return {'forgotten': id}
 
 @tool
 async def set_reminder(

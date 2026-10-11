@@ -80,6 +80,8 @@ Registered in `client.py` for every chat. Each runs only the first matching hand
 | `/stfu` | none | Toggle always-on. When off, messages are recorded but not answered. Adds an `API: Always On is now enabled/disabled...` user message to the context and replies `Always On is now Enabled/Disabled`. |
 | `/model` | `[<model>[-<effort>]]` | See [`models-and-openrouter.md`](models-and-openrouter.md). |
 | `/autoroute` | none | Toggle auto routing. |
+| `/memory` | none | List this chat's memories with their ids (newest 30 at most, within 3000 characters; says how many older ones are not shown). |
+| `/forget` | `<id>` | Delete one memory of this chat. A missing or non-numeric id gives a usage message; an id that is not this chat's gives "no memory N in this chat". |
 
 An unregistered command such as `/aura` (removed) or `/stfu@some_other_bot` is not matched by a command handler and falls through to the **message** handler, so the bot answers it as ordinary text (verified). `/usage` is planned (#31) and does not exist.
 
@@ -90,7 +92,7 @@ Command replies are written by `main.py` and wrapped in underscores (Telegram it
 | Path | Created by | Contents |
 |---|---|---|
 | `app.log` | `main.py` logging | All log output, including every user message and bot reply (INFO) and one `llm_call` line per LLM call. Not rotated. Gitignored. |
-| `data/memory.json` | first `save_to_memory` | Per-chat memory. Gitignored (`data`). |
-| `data/rotbot.db` | startup (`db.init()`) | SQLite database. Currently only the `reminders` table. Gitignored (`data`). Deleting it deletes every pending reminder. |
 
-`data/` and `app.log` are gitignored. Deleting `data/memory.json` deletes all memory.
+| `data/rotbot.db` | startup (`db.init()`) | SQLite database: the `reminders` and `memories` tables. Gitignored (`data`). Deleting it deletes every pending reminder and all memory. |
+
+`data/` and `app.log` are gitignored. A `data/memory.json` left from before memory moved to SQLite is ignored.

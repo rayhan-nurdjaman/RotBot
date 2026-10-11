@@ -6,9 +6,11 @@ Tools live in a **registry** (`src/tools/registry.py`). A tool is one async func
 
 ```python
 @tool
-async def save_to_memory(ctx, user_info: Annotated[str, Field(description='The information to store, provided as a complete sentence.')]):
-	"""Stores non-sensitive user information to enhance future responses."""
-	return ctx.instance.add_memory(user_info)
+async def forget_memory(ctx, id: Annotated[int, Field(description='The id of the memory.')]):
+	"""Deletes one saved memory of this chat."""
+	if not await Memories.delete(ctx.chat_id, id):
+		raise ToolError(f'There is no memory with id {id} in this chat.')
+	return {'forgotten': id}
 ```
 
 - **Name**: the function name.
@@ -38,7 +40,9 @@ All schemas are strict (`"strict": true`, `"additionalProperties": false`, every
 
 | Tool | Parameters | Returns (inside `ok: true`) | Needs |
 |---|---|---|---|
-| `save_to_memory` | `user_info: string` (a complete sentence) | `{"state": "Information successfully saved.", "memory": "<the text>"}` | nothing |
+| `save_memory` | `text: string` (one complete sentence) | `{"id", "text", "already_saved"}`; `ok: false` if the text is empty, over 300 characters, looks like a secret, or the chat is full (200) | the chat's memories |
+| `recall_memory` | `query: string` (may be empty) | `{"memories": [{"id", "text"}, ...]}`, up to 10, best match first; an empty query gives the newest | the chat's memories |
+| `forget_memory` | `id: integer` | `{"forgotten": <id>}`; `ok: false` if this chat has no memory with that id | the chat's memories |
 | `set_reminder` | `description: string`, `when: string` (ISO 8601) | `{"id", "description", "when"}` (`when` echoed in the configured zone, e.g. `2026-10-12T09:30+08:00`); `ok: false` for text that is not ISO 8601 or a time not in the future | the chat's reminders |
 | `list_reminders` | none | `{"reminders": [{"id", "description", "when"}, ...]}`, this chat's waiting reminders, soonest first | the chat's reminders |
 | `cancel_reminder` | `id: integer` | `{"cancelled": <id>}`; `ok: false` if the chat has no waiting reminder with that id | the chat's reminders |
@@ -47,7 +51,18 @@ Plus two **server tools** run by OpenRouter (next section): `web_search` and `we
 
 ### Behaviour of each
 
-**`save_to_memory`** calls `Instance.add_memory`, which appends to the chat's memory list and rewrites `data/memory.json`. The text comes from the model and is stored as given. See [`context-and-caching.md`](context-and-caching.md) for how memory is shown back. Memory is per chat, not per user.
+**Memory tools** are backed by `src/memories.py` and the `memories` table (migration 2). Memory is **per chat, not per user**: every function takes the chat id, and a chat can only read, search or delete its own rows (an id from another chat is "not found"). A memory is a fact (`alice prefers tea`) or a standing instruction for the chat (`reply in a formal tone`); there is no separate setting for tone or style, a memory is how a user changes it from inside the chat, and the model is told to follow the instructions in the memory message. Personalities (`/schizo`) are YAML files an operator edits, not something users can change from chat.
+
+Rules enforced in `memories.add` (not only in the prompt):
+
+- Whitespace is collapsed. Empty text is rejected. At most `MAX_LENGTH` (300) characters.
+- Obvious secrets are rejected with a message the model can read: a run of 13 to 19 digits (card number), an `sk-` style key, a private key header, or a word like password, PIN, API key, secret or token followed by `is`, `=` or `:`. This is a safety net, **not** a classifier: it will miss secrets written other ways and may reject odd harmless text. The prompt guidance is the main defence.
+- Exact duplicates in the same chat (ignoring case) are not saved again; the existing id comes back with `already_saved: true`.
+- At most `MAX_PER_CHAT` (200) per chat. The limit is checked inside the `INSERT`, so two saves at once cannot both pass it.
+
+`recall_memory` is the one place that decides *which* memories match. `memories.search` splits the query into words (two or more word characters), counts how many of them occur in each memory, and returns the best matches, newest first among equals. It reads the chat's rows (at most 200) and scores them in Python. **If retrieval ever becomes vector search (#29), replace `search()` and add an embedding column in a new migration; nothing else depends on how matching works.** The prompt injection (`for_prompt`) is recency, not search.
+
+The memory tools do not record who saved a memory (`created_by` stays NULL), same as reminders (see [`known-issues.md`](known-issues.md)); the model is asked to name the person in the text. How memory is shown to the model is in [`context-and-caching.md`](context-and-caching.md). People see and remove memories with `/memory` and `/forget <id>` ([`telegram-client.md`](telegram-client.md)).
 
 There is no `get_time` tool: the model reads the time from the timestamp on each user message (see [`caching-and-server-tools.md`](caching-and-server-tools.md)). The timezone is one global setting, `timezone` in `config/config.yaml` (default `Asia/Singapore`), read by `src/clock.py`.
 

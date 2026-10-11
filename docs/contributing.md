@@ -27,7 +27,7 @@ Logs go to stdout and `app.log`. Stop with Ctrl-C. A bot token must exist (creat
 ## Tests
 
 ```sh
-env/bin/python -m pytest -q               # 169 tests, about 2 seconds, no network
+env/bin/python -m pytest -q               # 198 tests, about 2 seconds, no network
 env/bin/python -m pyflakes src tests      # expect exactly 2 pre-existing warnings in src/
 ```
 
@@ -43,7 +43,7 @@ Layout (`tests/`):
 | `test_typing_and_reasoning.py` | Typing task lifecycle, reasoning kept within a loop and dropped between turns |
 | `test_logging.py` | The `llm_call` line, image-only message logging |
 | `test_registry.py` | Registry: schema generation, strict mode, validation, result shape, prompt section |
-| `test_memory.py` | Memory save, per-chat isolation, persistence, trailing-message placement |
+| `test_memory.py` | The memory store (limits, duplicates, secrets filter, search ranking, per-chat scoping, persistence), the memory message and its caps, once-per-turn loading, the three tools, `/memory` and `/forget` |
 | `test_reminders.py` | Reminder store and scheduler (fake clock, temp database): ordering, wake-up, late-on-startup, retry and `failed`, restart, cancel; the three tools (ISO parsing, offsets, DST, past times, chat scoping); `on_reminder` delivery and the lock |
 | `test_clock.py` | Timezone, `stamp()`, message timestamps |
 | `test_db.py` | `db.init`, migrations, failed migration, newer database refused |
@@ -53,7 +53,7 @@ Layout (`tests/`):
 ### How tests avoid the network and real state
 
 - **No test calls Telegram or OpenRouter.** LLM calls are replaced by fakes (`monkeypatch.setattr(Assistant.ChatCompletion, 'create', fake)`) or the module's `openai_client` is replaced with a stand-in. Fakes **must match the real signature** `create(messages, model, tools=None, chat_id=None, tool_choice=None)`; changing the signature breaks every fake, which is intended.
-- **`instance.memory_file` is redirected to a temp path** (`monkeypatch.setattr('instance.memory_file', ...)`). A test that makes an `Instance` and saves memory without this writes to the real `data/memory.json`. In the suite, memory tests use an `autouse` fixture; other tests that save memory do their own redirect. Do the same in new tests.
+- **Memory is in the database, so tests that save or search memory open a temp database** (`db.init(tmp_path / 'rotbot.db')`, `db.close()` afterwards). `Instance` itself never touches the database until `load_memory()` runs at the start of `get_response`; if no database is open, the error is logged and the turn goes on. Tests that run `get_response` without a database therefore work and see no memory.
 - **`main.instances` is a module-level dict** shared between tests. Tests reset it with `monkeypatch.setattr(main, 'instances', {})`. Tests that need the database call `db.init(tmp_path)` and `db.close()` themselves, and control time with `monkeypatch.setattr(clock, 'now', ...)`.
 - **`client.application`** is built at import with a dummy token. Replace the whole `application` attribute (or `Client.send_message` etc.) rather than assigning to `application.bot.<method>`, which PTB forbids.
 - Test code uses `asyncio.run(...)` per test; there is no pytest-asyncio.
@@ -104,4 +104,4 @@ When you change behaviour, update the relevant page in the same commit. The "Doc
 
 ## Project management
 
-Issues and milestones are on GitHub (`rayhan-nurdjaman/RotBot`), tracked by issue #30. Milestone 0 (stabilise) is done, Milestone 1 (OpenRouter) is mostly done, Milestones 2 (tools) and 3 (architecture) are not started. The recommended order from the tracking issue: the tool registry (#15) before the tool issues, and SQLite persistence (#18) before real memory (#19) and reminders (#20).
+Issues and milestones are on GitHub (`rayhan-nurdjaman/RotBot`), tracked by issue #30. Milestone 0 (stabilise) is done, Milestone 1 (OpenRouter) is mostly done, Milestone 2 (tools) has the registry, server tools, reminders and memory done and MCP (#17) open, Milestone 3 (architecture) is not started. SQLite persistence (#18) is partly done: reminders and memories are in the database, conversations and per-chat settings are not.

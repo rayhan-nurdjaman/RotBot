@@ -52,7 +52,7 @@ Request order in `Instance.get_context()`:
 ```
 
 - **Current time**: stamped into the text of every user message when it is stored (`[2026-10-11 Sun 21:54] alice: hi`, see `clock.stamp()` and `Instance.add_user_message`). Stored text never changes afterwards, so the history stays append-only and cacheable. The model reads the time off the latest message. The system prompt names the timezone once (`{timezone}` placeholder, filled from `config.yaml: timezone`). Messages that are not typed by a user (`API: ...` notices) are stamped too, since they go through the same method.
-- **Memory**: moved to a message right after the system prompt instead of a trailing one. It changes only when `save_to_memory` runs, so the cost is one cache write per save instead of one per turn. This is also what made case 10 recover.
+- **Memory**: moved to a message right after the system prompt instead of a trailing one. It changes only when a memory is saved or removed, so the cost is one cache write per save instead of one per turn. This is also what made case 10 recover.
 - **Staleness**: the time is the time the user message was stored. Inside a long tool loop (a few seconds, up to 8 steps) it does not move. The model does not need more precision than that.
 - **Side benefit**: the model can see when each earlier message was sent ("what did I say an hour ago?"), which a single "current time" line cannot give.
 - **Cost of the design**: one stamp is about 10 tokens per user message. The model is told not to start its own replies with a timestamp. In the few live replies checked it did not, but that was not tested at scale.

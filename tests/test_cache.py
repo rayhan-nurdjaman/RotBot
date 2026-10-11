@@ -11,8 +11,7 @@ from models import parse_model
 
 
 @pytest.fixture
-def instance(tmp_path, monkeypatch):
-    monkeypatch.setattr('instance.memory_file', str(tmp_path / 'memory.json'))
+def instance():
     return Instance('chat-1')
 
 
@@ -26,7 +25,7 @@ def breakpoints(messages):
 
 
 def test_request_order_is_system_then_memory_then_history(instance):
-    instance.add_memory('alice likes tea')
+    instance.memory = [{'id': 1, 'text': 'alice likes tea'}]
     instance.add_user_message('alice: hi')
     instance.add_assistant_message('hello')
     instance.add_user_message('alice: again')
@@ -39,7 +38,7 @@ def test_request_order_is_system_then_memory_then_history(instance):
 
 
 def test_exactly_one_breakpoint_on_the_last_message_of_the_request(instance):
-    instance.add_memory('alice likes tea')
+    instance.memory = [{'id': 1, 'text': 'alice likes tea'}]
     instance.add_user_message('alice: hi')
     instance.add_assistant_message('hello')
     instance.add_user_message('alice: again')
@@ -100,7 +99,7 @@ def test_assistant_message_with_no_content_is_left_alone(instance):
 
 def test_system_prompt_is_identical_between_requests_and_after_memory_changes(instance):
     first = instance.get_system_prompt()
-    instance.add_memory('alice likes tea')
+    instance.memory = [{'id': 1, 'text': 'alice likes tea'}]
     instance.add_user_message('alice: hi')
 
     assert instance.get_system_prompt() == first

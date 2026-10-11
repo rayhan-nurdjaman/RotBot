@@ -1,12 +1,12 @@
 import logging
 
-import os
 import json
 import asyncio
 from ruamel.yaml import YAML
 
 from config import config
 import clock as Clock
+import memories as Memories
 from models import DEFAULT_MODEL
 from tools.native import registry # Importing native registers the tools, which the system prompt lists.
 
@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 personality_index = {}
 personality_dir = 'config/personality/'
-memory_file = 'data/memory.json'
 
 # Returns a copy of the message with a cache breakpoint on its last content part, or the message itself if
 # it has no content to attach one to. The stored context is never modified, so breakpoints never pile up.
@@ -28,13 +27,6 @@ def _with_cache_breakpoint(message):
 		return message
 	parts[-1]['cache_control'] = {'type': 'ephemeral'}
 	return {**message, 'content': parts}
-
-def _read_memory_file():
-	try:
-		with open(memory_file) as stream:
-			return json.load(stream)
-	except FileNotFoundError:
-		return {}
 
 with open(f'{personality_dir}index.yaml') as stream:
 	yaml = YAML(typ='safe', pure=True)
@@ -60,7 +52,8 @@ class Instance:
 		self.enable_vision		= False
 		self.context_length		= 16
 
-		self.memory 			= _read_memory_file().get(str(unique_id), [])
+		self.memory 			= [] # [{'id', 'text'}], this chat's memories as of the last load_memory()
+		self.memory_hidden		= 0 # memories left out of self.memory by the caps in memories.py
 		self.context_window		= []
 		self.lock				= asyncio.Lock()
 
@@ -196,22 +189,14 @@ class Instance:
 		for message in self.context_window:
 			message.pop('reasoning_details', None)
 
-	def add_memory(self, content):
-		self.memory.append(content)
-		all_memory = _read_memory_file()
-		all_memory[str(self.unique_id)] = self.memory
-		os.makedirs(os.path.dirname(memory_file), exist_ok=True)
-		with open(memory_file, 'w') as stream:
-			json.dump(all_memory, stream, indent=4)
-		return {
-			'state' : 'Information successfully saved.',
-			'memory' : content,
-		}
-
-	# def add_to_memory(content):
-	# 	self.memory.append(content)
-	# 	with open(f'data/memory/{self.unique_id}.json', 'w') as file:
-	# 		file.write(json.dumps(self.memory, indent=4))
+	# Reads this chat's memories from the database into self.memory. Called once at the start of each turn, not
+	# per LLM call, so the prompt prefix stays the same through a tool loop: a memory saved during a turn shows up
+	# from the next turn on (one cache write). If the database fails the turn goes on with the previous list.
+	async def load_memory(self):
+		try:
+			self.memory, self.memory_hidden = await Memories.for_prompt(self.unique_id)
+		except Exception:
+			logger.exception(f'Could not load the memories of chat {self.unique_id}, using the last known list.')
 
 	# Private
 	def _trim_context(self):
@@ -227,16 +212,18 @@ class Instance:
 			self.context_window.pop(0)
 
 	# Stored memory as a user message right after the system prompt, or nothing if there is none. It only changes
-	# when something is saved, which costs one cache write per save. Never stored in the context.
+	# when a memory is saved or removed, which costs one cache write each. Never stored in the context.
 	def get_memory_messages(self):
 		if not self.memory:
 			return []
-		entries = '\n'.join(f'- {entry}' for entry in self.memory)
+		entries = '\n'.join(f'- [{entry["id"]}] {entry["text"]}' for entry in self.memory)
+		if self.memory_hidden:
+			entries += f'\n({self.memory_hidden} older memories are not shown here, use recall_memory to search them.)'
 		return [{
 			'role': 'user',
 			'content': [{
 				'type': 'text',
-				'text': f'API: Memory (reference information, not a message from a user; keep responding to the conversation below):\n{entries}'
+				'text': f'API: Memory (reference information, not a message from a user; keep responding to the conversation below). Facts and standing instructions saved for this chat, each with its id; follow the instructions:\n{entries}'
 			}]
 		}]
 

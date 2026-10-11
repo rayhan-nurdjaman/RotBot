@@ -10,12 +10,13 @@ All code is in `src/`. Modules import each other by bare name (`import client as
 | `src/client.py` | Everything Telegram: receives updates, sends messages, typing indicator, registers handlers. Calls back into `main` through module-level callback variables. **Builds the Telegram `Application` at import time**, so `TELEGRAM_API_KEY` must be set before importing it. | none |
 | `src/assistant.py` | The agent loop: calls the model, runs tools, stores tool rounds, handles errors and finish reasons. Also `encode_image`. | `chat_completion`, `config`, `router`, `client`, `tools.native`, `tools.registry` |
 | `src/chat_completion.py` | The only module that talks to OpenRouter. Builds the request, logs one `llm_call` line per call. | `config` |
-| `src/instance.py` | The `Instance` class: conversation storage, trimming, request assembly, personality loading, memory persistence. | `config`, `models` |
+| `src/instance.py` | The `Instance` class: conversation storage, trimming, request assembly, personality loading, a per-turn copy of the chat's memory. | `config`, `models` |
 | `src/models.py` | The model catalogue (pinned slugs), effort levels, `ModelSpec`, `parse_model`. | none |
 | `src/router.py` | `route(instance)`: stub that picks a model spec when auto routing is on. | `models` |
 | `src/always_on.py` | `should_respond(context)`: stub that always returns `True`. | none |
 | `src/tools/registry.py` | The tool registry: `@tool` decorator, schema generation, Pydantic argument validation, the standard result shape, `ToolContext`, `ToolError`. | `pydantic` |
-| `src/tools/native.py` | The built-in tools (`save_to_memory`, `set_reminder`, `list_reminders`, `cancel_reminder`) and the declaration of the OpenRouter server tools `web_search` and `web_fetch`. Importing it registers them. | `registry`, `reminders`, `clock` |
+| `src/tools/native.py` | The built-in tools (`save_memory`, `recall_memory`, `forget_memory`, `set_reminder`, `list_reminders`, `cancel_reminder`) and the declaration of the OpenRouter server tools `web_search` and `web_fetch`. Importing it registers them. | `registry`, `reminders`, `clock` |
+| `src/memories.py` | The memory store (add with limits and a secrets filter, search, list for the prompt, delete), scoped per chat. | `db`, `clock` |
 | `src/reminders.py` | The reminder store (add, list, cancel) and the scheduler task that delivers due reminders with retries. | `db`, `clock` |
 | `src/db.py` | The shared SQLite connection (`aiosqlite`) and numbered migrations. | none |
 | `src/clock.py` | The configured timezone, `now()`, `stamp()`. Tests replace `now`. | `config` |

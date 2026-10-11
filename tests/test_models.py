@@ -33,15 +33,13 @@ def test_default_is_cheapest_model_at_lowest_effort():
     assert DEFAULT_MODEL.slug == 'anthropic/claude-haiku-5.5'
 
 
-def test_new_instance_defaults(tmp_path, monkeypatch):
-    monkeypatch.setattr('instance.memory_file', str(tmp_path / 'memory.json'))
+def test_new_instance_defaults():
     instance = Instance('chat-1')
     assert instance.model == DEFAULT_MODEL
     assert instance.auto_route is False
 
 
-def test_personality_switch_does_not_change_model(tmp_path, monkeypatch):
-    monkeypatch.setattr('instance.memory_file', str(tmp_path / 'memory.json'))
+def test_personality_switch_does_not_change_model():
     instance = Instance('chat-1')
     instance.model = parse_model('opus-5.5-high')
     instance.set_personality('lockedin')
@@ -104,7 +102,6 @@ def test_no_openai_key_is_read():
 
 
 def make_instance(tmp_path, monkeypatch):
-    monkeypatch.setattr('instance.memory_file', str(tmp_path / 'memory.json'))
     return Instance('chat-1')
 
 

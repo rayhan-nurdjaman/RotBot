@@ -153,15 +153,15 @@ def test_native_function_tools_are_strict_and_have_no_idle_message():
         assert function['strict'] is True and parameters['additionalProperties'] is False
         assert parameters['required'] == list(parameters['properties'])
         assert 'idle_message' not in parameters['properties']
-    assert [f['name'] for f in functions] == ['save_to_memory', 'set_reminder', 'list_reminders', 'cancel_reminder']
+    assert [f['name'] for f in functions] == ['save_memory', 'recall_memory', 'forget_memory', 'set_reminder', 'list_reminders', 'cancel_reminder']
 
 
 def test_server_tools_come_after_function_tools_and_are_capped():
     from tools.native import registry as native_registry
 
     schemas = native_registry.schemas()
-    assert [s['type'] for s in schemas] == ['function'] * 4 + ['openrouter:web_search', 'openrouter:web_fetch']
-    search, fetch = schemas[4:]
+    assert [s['type'] for s in schemas] == ['function'] * 6 + ['openrouter:web_search', 'openrouter:web_fetch']
+    search, fetch = schemas[6:]
     assert search['parameters']['max_uses'] and search['parameters']['max_results'] and search['parameters']['max_characters']
     assert fetch['parameters']['max_uses'] and fetch['parameters']['max_content_tokens']
 
@@ -205,14 +205,13 @@ def test_prompt_section_is_generated_from_the_registry(registry):
     assert registry.prompt_section() == '1. first\n- Does one thing.\n- And another.\n2. second\n- Second.'
 
 
-def test_system_prompt_lists_every_registered_tool(tmp_path, monkeypatch):
+def test_system_prompt_lists_every_registered_tool():
     from instance import Instance
     from tools.native import registry as native_registry
 
-    monkeypatch.setattr('instance.memory_file', str(tmp_path / 'memory.json'))
     prompt = Instance('chat-1').get_system_prompt()[0]['content'][0]['text']
 
     assert '{tools}' not in prompt
     assert native_registry.prompt_section() in prompt
-    for name in ('save_to_memory', 'set_reminder', 'list_reminders', 'cancel_reminder', 'web_search', 'web_fetch'):
+    for name in ('save_memory', 'recall_memory', 'forget_memory', 'set_reminder', 'list_reminders', 'cancel_reminder', 'web_search', 'web_fetch'):
         assert name in prompt

@@ -17,8 +17,11 @@ Copy `.env.example` to `.env` and fill in `TELEGRAM_API_KEY` and `OPENROUTER_API
 
 `/autoroute` toggles auto routing (off by default). When on, it overrides `/model` and `router.route()` picks the model each turn. That function is currently a stub that always returns the cheapest model.
 
+# Memory
+Each chat has a shared memory of short facts and standing instructions (for example "reply in a formal tone"), kept in the SQLite database. The model saves, searches and forgets memories with tools. `/memory` lists them with their ids and `/forget <id>` removes one. Anyone in a chat can use both.
+
 # Prompt caching
-Requests are ordered so the front of the prompt stays identical between requests, which lets Anthropic's prompt cache hit: static system prompt and tool list first, then an append-only history with a cache breakpoint on its last message, then volatile data (the user's memory) as a trailing message. History is trimmed in chunks (`context_trim_fraction` in `config/config.yaml`), so the window grows by that fraction of `context_length` before being cut back, instead of shifting on every message. Personality switches change the system prompt and so reset the cache, intentionally. `cached_tokens` is in the `llm_call` log line. Prompts under 512 tokens are not cached by the 5.5 models.
+Requests are ordered so the front of the prompt stays identical between requests, which lets Anthropic's prompt cache hit: static system prompt and tool list first, then an append-only history with a cache breakpoint on its last message, with the chat's memory as a message right after the system prompt (it changes only when a memory is saved or removed). Nothing may come after the history. History is trimmed in chunks (`context_trim_fraction` in `config/config.yaml`), so the window grows by that fraction of `context_length` before being cut back, instead of shifting on every message. Personality switches change the system prompt and so reset the cache, intentionally. `cached_tokens` is in the `llm_call` log line. Prompts under 512 tokens are not cached by the 5.5 models.
 
 # Privacy
 Every message the bot can see in a chat, including group messages and photos, is sent to a third-party model provider (OpenRouter, which forwards it to Anthropic) to generate replies. Message text and replies are also written to `app.log` by the application logger.

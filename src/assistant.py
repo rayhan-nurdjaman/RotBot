@@ -39,6 +39,7 @@ async def get_response(instance, message=None, raise_errors=False):
 	async with instance.lock:
 		if message:
 			instance.add_user_message(message)
+		await instance.load_memory()
 		try:
 			return await _run_turn(instance)
 		except openai.APIError as e:

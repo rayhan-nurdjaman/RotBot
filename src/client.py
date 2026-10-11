@@ -26,6 +26,8 @@ toggle_always_on_callback			= None
 set_instance_personality_callback	= None
 set_instance_model_callback			= None
 toggle_auto_route_callback			= None
+list_memories_callback				= None
+forget_memory_callback				= None
 
 async def _handle_image(update, context):
 	image_max_res = 512
@@ -162,6 +164,12 @@ async def model(update: telegram.Update, context: telegram.ext.ContextTypes.DEFA
 async def autoroute(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
 	await toggle_auto_route_callback(update.message.chat.id)
 
+async def memory(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
+	await list_memories_callback(update.message.chat.id)
+
+async def forget(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
+	await forget_memory_callback(update.message.chat.id, ' '.join(context.args))
+
 # TODO(/usage): not implemented yet, see https://github.com/rayhan-nurdjaman/RotBot/issues/31
 # Any member of a chat can run it, and it shows only that chat's own usage and spend.
 
@@ -169,6 +177,8 @@ application.add_handler(telegram.ext.CommandHandler('stfu', toggle_always_on))
 application.add_handler(telegram.ext.CommandHandler('model', model))
 application.add_handler(telegram.ext.CommandHandler('autoroute', autoroute))
 application.add_handler(telegram.ext.CommandHandler('schizo', schizo))
+application.add_handler(telegram.ext.CommandHandler('memory', memory))
+application.add_handler(telegram.ext.CommandHandler('forget', forget))
 application.add_handler(telegram.ext.MessageHandler(telegram.ext.filters.ALL, on_message))
 
 logger.info('Client object initialized.')

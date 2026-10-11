@@ -59,7 +59,6 @@ def test_missing_usage_is_logged_as_null_not_a_crash(monkeypatch, caplog):
 
 
 def test_logging_an_image_only_message_does_not_crash(tmp_path, monkeypatch, caplog):
-    monkeypatch.setattr('instance.memory_file', str(tmp_path / 'memory.json'))
     instance = Instance('chat-1')
 
     with caplog.at_level(logging.INFO, logger='instance'):

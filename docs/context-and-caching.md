@@ -8,7 +8,7 @@ Implemented in `src/instance.py`. Request assembly happens in `Instance.get_cont
 
 ```
 [ system message ]                       static: base system prompt + persona custom_instruction
-[ memory message ]                       only if the chat has memory; changes only when something is saved
+[ memory message ]                       only if the chat has memory; changes only when a memory is saved or removed
 [ history message 1 ]  \
 [ history message 2 ]   |  instance.context_window, append-only between trims
 [ ...               ]   |
@@ -22,7 +22,7 @@ Implemented in `src/instance.py`. Request assembly happens in `Instance.get_cont
 | System message | `get_system_prompt()`: `system_prompt` (from `base.yaml`) + `custom_instruction` (from the persona) | Only on `/schizo`. **Never** per request. |
 | Tool list | the tool registry (`registry.schemas()`), sent as the `tools` parameter | Never. |
 | History | `context_window` | Append-only, except when trimmed (see below). |
-| Memory message | `get_memory_messages()` | When memory is saved (one cache write each time). Always right after the system prompt. |
+| Memory message | `get_memory_messages()` | When a memory is saved or removed (one cache write each time). Always right after the system prompt. |
 
 The tool list is not part of the `messages` list but is part of the cached prefix on the provider side (Anthropic's documented prefix order is tools, then system, then messages; not independently verified here), so it must never change within a chat's lifetime. **Never add, remove or reorder tools at runtime.**
 
@@ -52,12 +52,12 @@ The stored text is `"[<date> <weekday> <HH:MM>] <telegram username>: <text>"`, f
 ```json
 {"role": "assistant", "tool_calls": [
   {"id": "call_a", "type": "function", "function": {"name": "set_reminder", "arguments": "{\"description\": \"...\", \"when\": \"2026-10-12T09:30:00\"}"}},
-  {"id": "call_b", "type": "function", "function": {"name": "save_to_memory", "arguments": "{\"user_info\": \"...\"}"}}
+  {"id": "call_b", "type": "function", "function": {"name": "save_memory", "arguments": "{\"text\": \"...\"}"}}
  ],
  "reasoning_details": [ ... ]      // only if the model returned any; see below
 }
 {"role": "tool", "tool_call_id": "call_a", "content": "{\"ok\": true, \"id\": 1, \"description\": \"...\", \"when\": \"2026-10-12T09:30+08:00\"}"}
-{"role": "tool", "tool_call_id": "call_b", "content": "{\"state\": \"Information successfully saved.\", \"memory\": \"...\"}"}
+{"role": "tool", "tool_call_id": "call_b", "content": "{\"ok\": true, \"id\": 3, \"text\": \"...\", \"already_saved\": false}"}
 ```
 
 - The assistant message has **no `content` key** (not `""` and not `null`).
@@ -69,10 +69,10 @@ The stored text is `"[<date> <weekday> <HH:MM>] <telegram username>: <text>"`, f
 
 ```json
 {"role": "user", "content": [{"type": "text", "text":
-  "API: Memory (reference information, not a message from a user; keep responding to the conversation below):\n- alice likes oat milk"}]}
+  "API: Memory (reference information, not a message from a user; keep responding to the conversation below). Facts and standing instructions saved for this chat, each with its id; follow the instructions:\n- [3] alice likes oat milk\n- [5] reply in a formal tone\n(4 older memories are not shown here, use recall_memory to search them.)"}]}
 ```
 
-Memory is saved **per chat, not per person**. In a group chat every member shares one memory list.
+The last line appears only when the caps left some out. Memory is saved **per chat, not per person**. In a group chat every member shares one memory list.
 
 ## Trimming
 
@@ -139,6 +139,10 @@ Reasoning text itself is never shown to users and never stored anywhere other th
 
 ## Memory persistence
 
-`Instance.add_memory(text)` appends to `instance.memory` and rewrites `data/memory.json`, a JSON object `{ "<chat_id as string>": ["entry", ...] }`. `data/` is created if missing. `Instance.__init__` loads the chat's list from the file. The file is read and rewritten whole on every save (no locking needed: the code between read and write has no `await`). The path is the module variable `instance.memory_file`; tests redirect it to a temp dir.
+Memories live in the SQLite `memories` table (`src/memories.py`, see [`tools.md`](tools.md)), not in the `Instance`. The `Instance` only keeps a copy for building requests: `instance.memory` (a list of `{id, text}`, oldest first) and `instance.memory_hidden` (how many were left out by the caps).
 
-There is no way to view, edit or delete memory from Telegram, and nothing limits its size. Each entry is injected into every request. A planned replacement (#19) adds per-user storage with recall and forget.
+**When the copy is refreshed.** `Instance.load_memory()` runs **once at the start of each turn**, inside `assistant.get_response` after the chat lock is taken, and **not** before each LLM call of a tool loop. So every request of one turn has the same memory message, and the prompt cache holds through the loop. A memory saved or forgotten *during* a turn (by the model) shows up from the **next** turn; the model knows what it just did from the tool result. `/forget` from Telegram takes effect at the next turn's load. If the database read fails, the error is logged and the turn goes on with the previous copy.
+
+**Caps.** The prompt gets at most `PROMPT_COUNT` (50) newest memories and at most `PROMPT_CHARS` (4000) characters of them; older ones are counted as hidden and found with `recall_memory`. Each save or forget changes the message, so it costs one cache write; between changes it costs nothing.
+
+There was a `data/memory.json` before migration 2. It is no longer read and nothing imports it; old files are ignored.

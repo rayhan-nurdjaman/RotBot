@@ -28,6 +28,7 @@ What has been proven, and how. Use this to decide how much to trust a piece of b
 | The model reads the current time off the stamp on the latest message and answers day, date and relative dates correctly; `set_reminder` arguments computed from it were correct (`+1 hour` and `+2 hours`) | Live turns on Haiku |
 | The new reminder tools work with a real model (Haiku): `set_reminder` with an ISO `when` computed from "in 15 seconds" (it rounded to the next minute, since the stamp has no seconds), `list_reminders`, `cancel_reminder` in the same turn as a set, and a reminder that came due fired once through the scheduler and `on_reminder`, marked `done` in a real SQLite file. Telegram was faked. Cache reads were 94-98% of the prompt on almost every request, with one exception: the request right after a `set_reminder` tool round in the third turn had `cached_tokens` 0, and its prompt was 3278 tokens against 3481 on the request before it. Not investigated; a different provider route is one possibility (*inferred*) | Live turns on Haiku, about $0.005 |
 | The top-level `cache_control` shortcut gave **0** cached tokens with a trailing volatile message | Three consecutive requests |
+| The memory tools work with a real model (Haiku), backed by a real SQLite file, Telegram faked: from one message it saved a preference **and** a standing instruction ("end replies with the word cheers") as two memories and followed the instruction from then on; a fresh `Instance` on the same database (a simulated restart) listed both memories; "forget the tea preference" deleted exactly that one; a different chat saw none. Cache reads on the later requests of a turn, and on the next turn when no memory had changed, were 93-98% of the prompt (for example 3812 of 4115 and 3996 of 4070 tokens). The first request after a memory was saved or forgotten read 0 from the cache, as designed (one cache write per change), and so did the first request of a fresh `Instance` or chat (its history differs from the cached one); the request after that hit again. Not investigated: whether the 93% on the first tool loop is the usual figure for a first hit | A six-turn script on Haiku, about $0.01 |
 | A breakpoint works on a tool message (string content converted to a part) and on an image part | Two requests each, second one hit |
 | A history that starts with an assistant message is accepted | One request |
 | `tool_choice: "none"` with tools declared is accepted on all three models | One request each |
@@ -54,7 +55,7 @@ What has been proven, and how. Use this to decide how much to trust a piece of b
 
 ## Covered by tests (Test)
 
-169 tests, see [`contributing.md`](contributing.md). They prove the logic given fakes: grouping and ordering of tool rounds, the step cap, every finish reason branch, each error mapping, tool timeouts, malformed arguments, the lock, trimming never leaving an orphan, chunked trimming, request ordering and breakpoint placement, no `temperature`, the typing task lifecycle, reasoning kept and dropped, memory persistence, the reminder scheduler (ordering, wake-up, retry, restart, cancel) and its tools, command behaviour, the `llm_call` fields.
+198 tests, see [`contributing.md`](contributing.md). They prove the logic given fakes: grouping and ordering of tool rounds, the step cap, every finish reason branch, each error mapping, tool timeouts, malformed arguments, the lock, trimming never leaving an orphan, chunked trimming, request ordering and breakpoint placement, no `temperature`, the typing task lifecycle, reasoning kept and dropped, the memory store and its limits, the reminder scheduler (ordering, wake-up, retry, restart, cancel) and its tools, command behaviour, the `llm_call` fields.
 
 **Tests cannot prove** that Telegram, OpenRouter or the provider cache behave as assumed. That is what the Live list is for.
 
@@ -70,6 +71,8 @@ What has been proven, and how. Use this to decide how much to trust a piece of b
 | Images sent to the model end to end (a real photo from Telegram) | A breakpoint on an image part was checked with a generated 64 by 64 JPEG; the encode path was not run on a real photo |
 | Behaviour of `reasoning.exclude`, `reasoning.max_tokens`, the `models` fallback list, `provider` options, the OpenRouter `advisor` and `subagent` server tools | Not used |
 | Large conversations (hundreds of messages), long-running stability, memory growth | Not exercised |
+| `/memory` and `/forget` through Telegram (the handlers are three lines each; the logic they call is tested with a faked `send_message`) | Not exercised, no bot token |
+| Whether the secrets filter catches real-world secrets, and how often it rejects harmless text | Only the listed examples are tested |
 | Windows or macOS | Developed and run on Linux only; the code base used CRLF and was converted to LF |
 
 ## Dates of facts that can rot

@@ -16,12 +16,12 @@ Read this before changing anything. Every term below is used with exactly this m
 | **Model spec** | `models.ModelSpec(name, effort)`, for example `haiku-5.5` + `high`, written `haiku-5.5-high`. Model and reasoning effort are always chosen together. |
 | **Slug** | The OpenRouter model id, for example `anthropic/claude-haiku-5.5`. Derived from the spec name. Never hardcode slugs outside `src/models.py`. |
 | **Personality** | A YAML file in `config/personality/` that adds a `custom_instruction` on top of the `base` persona. Chosen per chat with `/schizo <name>`. A personality never chooses a model. |
-| **Memory** | A list of short strings per chat, saved by the `save_to_memory` tool to `data/memory.json`, shown to the model as a trailing message. |
+| **Memory** | Short texts per chat (facts, or standing instructions such as a tone), rows in the SQLite `memories` table. The model saves, searches and deletes them with tools; people use `/memory` and `/forget`. The newest are shown to the model in a message right after the system prompt (see [`tools.md`](tools.md)). |
 | **Reminder** | A `(time, description)` row per chat in the SQLite `reminders` table, delivered by the scheduler in `src/reminders.py` (see [`tools.md`](tools.md)). Survives restarts. |
 | **Always-on** | A per-chat flag. When off, messages are recorded but the bot does not reply. `/stfu` toggles it. |
 | **Auto routing** | A per-chat flag (`/autoroute`). When on, `router.route(instance)` picks the model spec each turn and `/model` is ignored. |
 | **Cache breakpoint** | A `cache_control` marker on the last content part of the last history message. It tells the provider "cache everything up to here". |
-| **Volatile data** | Anything that changes between requests (currently only memory). It must go last in the request, after the breakpoint. |
+| **Volatile data** | Anything that changes between requests. It must not go in the system prompt and must not follow the history. Memory changes rarely, so it sits right after the system prompt; the time is stamped into stored messages. |
 | **Reasoning details** | `reasoning_details`: structured thinking blocks returned by some models. They must be sent back unchanged within a tool loop. |
 
 ## Rules that are easy to break
@@ -63,9 +63,9 @@ All messages use the OpenAI Chat Completions shape. OpenRouter accepts it unchan
 |---|---|---|
 | Conversation (context window) | `Instance.context_window` | No |
 | Per-chat model, auto-route flag, always-on flag, personality | `Instance` attributes | No |
-| Memory | `data/memory.json` (key = chat id as a string) | **Yes** |
+| Memory | `data/rotbot.db`, table `memories` | **Yes** |
 | Reminders | `data/rotbot.db`, table `reminders` | **Yes** |
 | Logs | `app.log` (and stdout) | Yes |
 | Usage and cost | Only the `llm_call` log lines | Only as log text |
 
-Persisting everything else in SQLite is planned (#18; the `db` module and the `reminders` table exist, the other tables do not). Until then, a restart wipes every conversation and setting, but not reminders.
+Persisting everything else in SQLite is planned (#18; the `db` module and the `reminders` and `memories` tables exist, the other tables do not). Until then, a restart wipes every conversation and setting, but not reminders or memories.

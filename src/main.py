@@ -23,6 +23,7 @@ from instance import Instance
 from models import parse_model, EFFORTS, MODELS
 
 import db
+import memories as Memories
 import reminders as Reminders
 
 instances = {}
@@ -131,6 +132,27 @@ async def toggle_auto_route(instance_id):
 	else:
 		await Client.send_message(instance.unique_id, f'_Auto routing is now Disabled, using \'{instance.model}\'_')
 
+# Anyone in a chat can see and remove that chat's memories. Both only touch the chat they are sent in.
+async def list_memories(instance_id):
+	entries, hidden = await Memories.for_prompt(instance_id, Memories.LIST_COUNT, Memories.LIST_CHARS)
+	if not entries:
+		await Client.send_message(instance_id, '_Nothing is saved in memory for this chat._')
+		return
+	lines = '\n'.join(f'{entry["id"]}. {entry["text"]}' for entry in entries)
+	more = f'\n_{hidden} older memories are not shown._' if hidden else ''
+	await Client.send_message(instance_id, f'_Memory of this chat (remove one with /forget <id>):_\n{lines}{more}')
+
+async def forget_memory(instance_id, text):
+	try:
+		memory_id = int(text)
+	except ValueError:
+		await Client.send_message(instance_id, '_Usage: /forget <id>, the id is the number shown by /memory._')
+		return
+	if await Memories.delete(instance_id, memory_id):
+		await Client.send_message(instance_id, f'_Forgot memory {memory_id}._')
+	else:
+		await Client.send_message(instance_id, f'_There is no memory {memory_id} in this chat._')
+
 # Entry point
 async def main():
 	# Client callbacks
@@ -139,6 +161,8 @@ async def main():
 	Client.toggle_always_on_callback			= toggle_always_on
 	Client.set_instance_model_callback			= set_instance_model
 	Client.toggle_auto_route_callback			= toggle_auto_route
+	Client.list_memories_callback				= list_memories
+	Client.forget_memory_callback				= forget_memory
 
 	scheduler = None
 	try:
