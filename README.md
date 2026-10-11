@@ -1,10 +1,13 @@
 # RotBot
 
-A general client Interface for LLMs (currently Claude 5.5 through OpenRouter, on telegram).
+A Telegram chatbot with per-chat personalities, memory, reminders and tools. Replies come from Claude 5.5 (Haiku, Sonnet, Opus) through OpenRouter.
 
 This project consists of a couple of modules
 - Client: This takes care of everything frontend, currently its telegram.
 - Assistant: This takes care of everything backend, currently Claude 5.5 through OpenRouter.
+
+# Documentation
+Full documentation for humans and agents is in [`docs/`](docs/README.md). Start with [`docs/concepts.md`](docs/concepts.md) and [`docs/architecture.md`](docs/architecture.md); known bugs are in [`docs/known-issues.md`](docs/known-issues.md).
 
 # Setup
 Copy `.env.example` to `.env` and fill in `TELEGRAM_API_KEY` and `OPENROUTER_API_KEY`. Also set a hard spend limit on the OpenRouter key in the OpenRouter dashboard, as a safety net the bot cannot bypass.
