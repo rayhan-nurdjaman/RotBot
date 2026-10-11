@@ -23,34 +23,14 @@
     {
         "type": "function",
         "function": {
-            "name": "send_gif",
-            "description": "Searches for a GIF based on a provided term and directly sends it to the current conversation.",
-            "strict": true,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "search_term": {
-                        "type": "string",
-                        "description": "The keyword or phrase used to find the desired GIF."
-                    }
-                },
-                "additionalProperties": false,
-                "required": [
-                    "search_term"
-                ]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "get_time",
             "description": "The ONLY source of reliable time. Returns the time in YYYY-MM-DD HH:MM:SS format.",
             "strict": true,
             "parameters": {
                 "type": "object",
                 "properties": {},
-                "additionalProperties": false
+                "additionalProperties": false,
+                "required": []
             }
         }
     },
@@ -84,7 +64,7 @@
         "type": "function",
         "function": {
             "name": "get_url_text",
-            "description": "An AI-powered tool that reads the given website from the url and then analyzes the content of the resulting websites to provide a summarized answer to the given query.",
+            "description": "Reads the website at the given url and returns its text and outbound links.",
             "strict": true,
             "parameters": {
                 "type": "object",
@@ -92,10 +72,6 @@
                     "url": {
                         "type": "string",
                         "description": "The website url the AI will read and analyze from."
-                    },
-                    "query": {
-                        "type": "string",
-                        "description": "The specific question or topic that the AI will analyze and answer based on the text from the websites found."
                     },
                     "idle_message": {
                         "type": "string",
@@ -105,7 +81,6 @@
                 "additionalProperties": false,
                 "required": [
                     "url",
-                    "query",
                     "idle_message"
                 ]
             }
@@ -158,32 +133,6 @@
                     "hour",
                     "minute",
                     "second"
-                ]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "generate_image",
-            "description": "Generates an image based on the provided textual description using DALL-E.",
-            "strict": true,
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "prompt": {
-                        "type": "string",
-                        "description": "A detailed textual description of the image to be generated."
-                    },
-                    "idle_message": {
-                        "type": "string",
-                        "description": "The message displayed to users while waiting for a response from the tool."
-                    }
-                },
-                "additionalProperties": false,
-                "required": [
-                    "prompt",
-                    "idle_message"
                 ]
             }
         }

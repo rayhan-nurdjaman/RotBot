@@ -1,5 +1,4 @@
 import os
-import json
 import openai
 # Tool returns should be standardised to JSON
 

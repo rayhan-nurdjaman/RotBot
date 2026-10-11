@@ -1,5 +1,4 @@
 from datetime import datetime, timezone, timedelta
-from instance import Instance
 
 # Need to put this in database for efficiency, currently here for the time being
 reminders = {}

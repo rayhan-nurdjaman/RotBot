@@ -1,5 +1,4 @@
 base: base.yaml
-alien: alien.yaml
 rotbot: rotbot.yaml
 british: british.yaml
 caveman: caveman.yaml

@@ -1,13 +1,22 @@
 import logging
 
+import os
 import json
-import tiktoken
+import asyncio
 from ruamel.yaml import YAML
 
 logger = logging.getLogger(__name__)
 
 personality_index = {}
 personality_dir = 'config/personality/'
+memory_file = 'data/memory.json'
+
+def _read_memory_file():
+	try:
+		with open(memory_file) as stream:
+			return json.load(stream)
+	except FileNotFoundError:
+		return {}
 
 with open(f'{personality_dir}index.yaml') as stream:
 	yaml = YAML(typ='safe', pure=True)
@@ -33,8 +42,9 @@ class Instance:
 		self.context_length		= 16
 		self.temperature		= 1.0
 
-		self.memory 			= []
+		self.memory 			= _read_memory_file().get(str(unique_id), [])
 		self.context_window		= []
+		self.lock				= asyncio.Lock()
 
 		self.zone_offset		= 8
 
@@ -60,11 +70,7 @@ class Instance:
 	# Adding to context; convenience functions
 	def add_to_context(self, message):
 		self.context_window.append(message)
-		self.context_window = self.context_window[-self.context_length:]
-		last_chat = self.context_window[0]
-		if last_chat['role'] == 'tool':
-			# Remove both tool_calls and tool 
-			self.context_window = self.context_window[1:]
+		self._trim_context()
 
 		# encoding = tiktoken.encoding_for_model(self.model)
 		# tokens = encoding.encode("Hello, world!")  # Returns a list of token integers
@@ -129,31 +135,42 @@ class Instance:
 		self.add_to_context(message)
 		logger.info(f'RotBot: {self.context_window[-1]['content']}\n')
 
-	def add_tool_call(self, tool_call_id, tool_name, tool_arguments):
-		tool_call_message = {
+	# calls: list of (tool_call_id, tool_name, tool_arguments, tool_response), in the order the model made them.
+	# Stored as one assistant message holding every tool call, then one tool message per call.
+	def add_tool_round(self, calls):
+		self.context_window.append({
 			'role': 'assistant',
 			'tool_calls': [
 				{
-				'id': tool_call_id,
-				'type': 'function',
-				'function': {
+					'id': tool_call_id,
+					'type': 'function',
+					'function': {
 						'name': tool_name,
 						'arguments': json.dumps(tool_arguments),
 					}
 				}
+				for tool_call_id, tool_name, tool_arguments, _ in calls
 			]
+		})
+		for tool_call_id, _, _, tool_response in calls:
+			self.context_window.append({
+				'role' : 'tool',
+				'tool_call_id': tool_call_id,
+				'content' : json.dumps(tool_response),
+			})
+		self._trim_context()
+
+	def add_memory(self, content):
+		self.memory.append(content)
+		all_memory = _read_memory_file()
+		all_memory[str(self.unique_id)] = self.memory
+		os.makedirs(os.path.dirname(memory_file), exist_ok=True)
+		with open(memory_file, 'w') as stream:
+			json.dump(all_memory, stream, indent=4)
+		return {
+			'state' : 'Information successfully saved.',
+			'memory' : content,
 		}
-
-		self.add_to_context(tool_call_message)
-
-	def add_tool_response(self, tool_call_id, tool_response):
-		tool_call_response = {
-			'role' : 'tool',
-			'tool_call_id': tool_call_id,
-			'content' : json.dumps(tool_response),
-		}
-
-		self.add_to_context(tool_call_response)
 
 	# def add_to_memory(content):
 	# 	self.memory.append(content)
@@ -161,9 +178,16 @@ class Instance:
 	# 		file.write(json.dumps(self.memory, indent=4))
 
 	# Private
+	def _trim_context(self):
+		self.context_window = self.context_window[-self.context_length:]
+		# Trimming only cuts from the front, so the only way to orphan a tool message is for the
+		# window to start inside a group of tool results. Drop those; their tool_calls message is gone.
+		while self.context_window and self.context_window[0]['role'] == 'tool':
+			self.context_window.pop(0)
+
 	def get_system_prompt(self):
-		processed_system_prompt = self.system_prompt
-		# processed_system_prompt = processed_system_prompt.replace('MEMORY', self.get_memory(chat_id))
+		memory = '\n'.join(f'- {entry}' for entry in self.memory) if self.memory else 'None'
+		processed_system_prompt = self.system_prompt.replace('MEMORY', memory)
 		return [
 			{
 				'role': 'system', 

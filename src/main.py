@@ -16,20 +16,18 @@ load_dotenv()
 
 import client as Client
 import assistant as Assistant
-import data_collection as DataCollection
 import always_on as AlwaysOn
 from instance import Instance
 
 from tools import time_manager as TimeManager
-from tools import search_engine as SearchEngine
-from tools import image_generation as ImageGeneration
 
 instances = {}
 
 def get_instance(instance_id):
 	global instances
-	instance = instances.setdefault(instance_id, Instance(instance_id))
-	return instance
+	if instance_id not in instances:
+		instances[instance_id] = Instance(instance_id)
+	return instances[instance_id]
 
 # Callbacks
 async def on_reminder(instance_id, reminder):
@@ -43,8 +41,7 @@ async def on_reminder(instance_id, reminder):
 
 async def on_message(instance_id, text, images=None, no_response=False):
 	#TODO: add time taken here
-	DataCollection.add_user_message(text)
-
+    # The TODO below is outdated, as the current system must require an image or fallback to a model that has vision capabilities
 	instance = get_instance(instance_id)
 	if images:  # TODO: and image modality enabled
 		instance.add_user_message(text, Assistant.encode_image(images))
@@ -63,16 +60,16 @@ async def on_message(instance_id, text, images=None, no_response=False):
 	await Client.send_indicator(instance, Client.Indicator.GENERATING_RESPONSE)
 	response = await Assistant.get_response(instance)
 	await Client.send_message(instance.unique_id, response)
-	DataCollection.add_assistant_message(response)
 
-# Commands, should somehow make a pipeline for defining them
+
+# Commands, should somehow make a pipeline for defining them, maybe decorators?
 async def set_instance_personality(instance_id, key):
 	instance = get_instance(instance_id)
 	try:
 		instance.set_personality('base')
 		instance.set_personality(key)
 		await Client.send_message(instance.unique_id, f'_Succesfully swapped personality to \'{key}\'_')
-	except:
+	except (KeyError, FileNotFoundError):
 		await Client.send_message(instance.unique_id, f'_The personality \'{key}\' does not exist._')
 
 async def toggle_always_on(instance_id):

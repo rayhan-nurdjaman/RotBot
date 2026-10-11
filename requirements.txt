@@ -4,5 +4,5 @@ openai==1.59.7
 Pillow==11.1.0
 python-dotenv==1.0.1
 python-telegram-bot==21.10
-ruamel.base==1.0.0
+ruamel.yaml==0.19.1
 tiktoken==0.8.0
