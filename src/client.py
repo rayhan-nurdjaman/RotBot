@@ -5,16 +5,18 @@ import telegram.ext
 
 import io
 import os
+import asyncio
+import contextlib
 from enum import Enum
 
 logger = logging.getLogger(__name__)
 
 class Indicator(Enum):
 	GENERATING_RESPONSE	= 0
-	SAVING_MEMORY		= 1
-	GENERATING_IMAGE	= 2
-	SEARCHING_THE_WEB	= 3
 	REMINDER_CREATED	= 4
+
+# Telegram clears a typing status after about 5 seconds, so it is re-sent a little sooner than that.
+TYPING_REFRESH_SECONDS = 4
 
 api_key = os.getenv('TELEGRAM_API_KEY')
 application = telegram.ext.Application.builder().token(api_key).build()
@@ -86,6 +88,26 @@ async def send_indicator(instance, indicator):
 	match indicator:
 		case Indicator.GENERATING_RESPONSE: # This hopefully will be deprecated once streaming is up
 			await application.bot.send_chat_action(chat_id=instance.unique_id, action=telegram.constants.ChatAction.TYPING)
+
+# Shows 'typing' for as long as the body runs (LLM calls and tool execution), and stops when it ends or fails.
+# Reasoning text is never sent to the chat, the typing status is all the user sees while the model thinks.
+@contextlib.asynccontextmanager
+async def typing(instance):
+	async def refresh():
+		while True:
+			try:
+				await send_indicator(instance, Indicator.GENERATING_RESPONSE)
+			except telegram.error.TelegramError:
+				logger.warning('Failed to send typing indicator.', exc_info=True)
+			await asyncio.sleep(TYPING_REFRESH_SECONDS)
+
+	task = asyncio.create_task(refresh())
+	try:
+		yield
+	finally:
+		task.cancel()
+		with contextlib.suppress(asyncio.CancelledError):
+			await task
 
 async def on_message(update, context):
 	# Ignore updates without a message (edits, channel posts, etc.)

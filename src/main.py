@@ -36,8 +36,8 @@ async def on_reminder(instance_id, reminder):
 	instance = get_instance(instance_id)
 	instance.add_user_message(message)
 
-	await Client.send_indicator(instance, Client.Indicator.GENERATING_RESPONSE)
-	response = await Assistant.get_response(instance)
+	async with Client.typing(instance):
+		response = await Assistant.get_response(instance)
 	await Client.send_message(instance.unique_id, response)
 
 async def on_message(instance_id, text, images=None, no_response=False):
@@ -58,8 +58,8 @@ async def on_message(instance_id, text, images=None, no_response=False):
 	if not await AlwaysOn.should_respond(instance.get_context()):
 		return
 
-	await Client.send_indicator(instance, Client.Indicator.GENERATING_RESPONSE)
-	response = await Assistant.get_response(instance)
+	async with Client.typing(instance):
+		response = await Assistant.get_response(instance)
 	await Client.send_message(instance.unique_id, response)
 
 

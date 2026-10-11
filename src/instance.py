@@ -139,8 +139,10 @@ class Instance:
 
 	# calls: list of (tool_call_id, tool_name, tool_arguments, tool_response), in the order the model made them.
 	# Stored as one assistant message holding every tool call, then one tool message per call.
-	def add_tool_round(self, calls):
-		self.context_window.append({
+	# reasoning_details: the model's reasoning blocks from this response. Providers need them passed back
+	# unchanged with the tool results (OpenRouter: consecutive blocks must match what was returned).
+	def add_tool_round(self, calls, reasoning_details=None):
+		assistant_message = {
 			'role': 'assistant',
 			'tool_calls': [
 				{
@@ -153,7 +155,10 @@ class Instance:
 				}
 				for tool_call_id, tool_name, tool_arguments, _ in calls
 			]
-		})
+		}
+		if reasoning_details:
+			assistant_message['reasoning_details'] = reasoning_details
+		self.context_window.append(assistant_message)
 		for tool_call_id, _, _, tool_response in calls:
 			self.context_window.append({
 				'role' : 'tool',
@@ -161,6 +166,12 @@ class Instance:
 				'content' : json.dumps(tool_response),
 			})
 		self._trim_context()
+
+	# Reasoning blocks are bound to the model that produced them, and the model can change between turns,
+	# so they are only kept for the tool loop of the turn that made them.
+	def drop_reasoning(self):
+		for message in self.context_window:
+			message.pop('reasoning_details', None)
 
 	def add_memory(self, content):
 		self.memory.append(content)

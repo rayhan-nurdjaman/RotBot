@@ -39,6 +39,7 @@ async def get_response(instance):
 			return _error_message(e)
 
 async def _run_turn(instance):
+	instance.drop_reasoning()
 	# Chosen once per turn so every step of a tool loop uses the same model.
 	model = Router.route(instance) if instance.auto_route else instance.model
 	for _ in range(max_tool_steps):
@@ -48,7 +49,8 @@ async def _run_turn(instance):
 
 		logger.info(f'Tools called: {len(response.message.tool_calls)}')
 		calls = await asyncio.gather(*[_process_tool_call(instance, tool_call) for tool_call in response.message.tool_calls])
-		instance.add_tool_round(calls)
+		reasoning_details = (getattr(response.message, 'model_extra', None) or {}).get('reasoning_details')
+		instance.add_tool_round(calls, reasoning_details)
 
 	logger.warning(f'Tool step limit ({max_tool_steps}) reached, forcing a final answer.')
 	return _finish(instance, await ChatCompletion.create(instance.get_context(), model, chat_id=instance.unique_id))
