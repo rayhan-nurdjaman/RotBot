@@ -30,12 +30,20 @@ CREDITS_MESSAGE = 'I\'m out of credits right now. Please let the bot owner know.
 REQUEST_MESSAGE = 'Something went wrong with that request. Please try again.'
 
 # Public | Methods used in client.py
-async def get_response(instance):
+# message: text to store as a user message before the turn, e.g. an 'API: ...' event written by the caller. It is
+# stored here, after the lock is taken, so it cannot land in the middle of another turn of the same chat. Use it
+# for turns that are not started by a user message (reminders, see issue #32).
+# raise_errors: let openai.APIError propagate instead of returning an error message, for callers with a fallback.
+async def get_response(instance, message=None, raise_errors=False):
 	# One loop per chat at a time, otherwise two quick messages interleave their context.
 	async with instance.lock:
+		if message:
+			instance.add_user_message(message)
 		try:
 			return await _run_turn(instance)
 		except openai.APIError as e:
+			if raise_errors:
+				raise
 			# Not stored in the context: the user's message stays, so they can simply retry.
 			return _error_message(e)
 

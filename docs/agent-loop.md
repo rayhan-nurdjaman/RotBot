@@ -5,11 +5,14 @@ Implemented in `src/assistant.py`. Entry point: `assistant.get_response(instance
 ## Algorithm
 
 ```text
-get_response(instance):
+get_response(instance, message=None, raise_errors=False):
     async with instance.lock:                         # one turn per chat at a time
+        if message:
+            instance.add_user_message(message)        # stored under the lock, see below
         try:
             return await _run_turn(instance)
         except openai.APIError as e:
+            if raise_errors: raise                    # for callers with their own fallback (reminders)
             return _error_message(e)                  # nothing stored; user's message stays
 
 _run_turn(instance):
@@ -25,6 +28,7 @@ _run_turn(instance):
     return _finish(instance, chat_completion.create(..., tool_choice="none"))
 ```
 
+- **`message`** is text stored as a user message at the start of the turn, for events that are not user messages, written by the caller including the `API:` prefix. It is stored after the lock is taken, so it cannot land in the middle of another turn. Use it for any new event source (reminders do). **`raise_errors=True`** lets `openai.APIError` escape instead of becoming a chat message, so a caller can fall back (reminders send plain text).
 - **Maximum LLM calls per turn: `max_tool_steps + 1` (9).**
 - The model is chosen **once per turn**, so every step of a tool loop uses the same model (reasoning blocks are bound to a model).
 - **Forced final answer.** After the cap, one more request is made with the *same tool list* and `tool_choice="none"`. The tool list is kept (not removed) so the cached prefix stays valid; `tool_choice="none"` was verified accepted on all three models. Pending tool calls from the last round are not executed.
@@ -83,7 +87,7 @@ The returned tuples are `(tool_call_id, tool_name, arguments_dict, result)` in *
 
 `instance.lock` (an `asyncio.Lock`) is held for the whole turn, including tool execution and the retries. A second turn for the same chat waits for it.
 
-**Caveat.** The lock serialises *LLM work*, not *what is in the context*. If a user message or reminder is appended to the context while another turn is waiting for the lock, the finished turn's reply is appended after it and the waiting turn then sends a request that **ends with an assistant message**, which Claude 5.5 rejects. See [known-issues.md](known-issues.md) item 1.
+**Caveat.** The lock serialises *LLM work*, not *what is in the context*. If a user message is appended to the context while another turn is waiting for the lock, the finished turn's reply is appended after it and the waiting turn then sends a request that **ends with an assistant message**, which Claude 5.5 rejects. See [known-issues.md](known-issues.md) item 1. Reminders avoid this: `get_response(instance, message=...)` stores its message only after taking the lock.
 
 ## Images
 

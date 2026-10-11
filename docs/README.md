@@ -4,7 +4,7 @@ RotBot is a Telegram chatbot. Each Telegram chat gets its own conversation, pers
 
 These docs describe the code **as it is now**, not as planned. Planned work lives in GitHub issues and is only referenced here when it changes how you should write code today.
 
-**Documentation was written at commit `71bbe7d` on branch `overhaul`.** If the code has moved on, trust the code and fix the docs.
+**Documentation was last updated for commit `3d28d30` plus the reminder rewrite on branch `overhaul`.** If the code has moved on, trust the code and fix the docs.
 
 ## How to use these docs
 

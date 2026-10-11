@@ -10,6 +10,8 @@ logging.basicConfig(
 )
 
 import asyncio
+import contextlib
+import openai
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -20,7 +22,8 @@ import always_on as AlwaysOn
 from instance import Instance
 from models import parse_model, EFFORTS, MODELS
 
-from tools import time_manager as TimeManager
+import db
+import reminders as Reminders
 
 instances = {}
 
@@ -31,13 +34,35 @@ def get_instance(instance_id):
 	return instances[instance_id]
 
 # Callbacks
-async def on_reminder(instance_id, reminder):
-	message = f'API: The reminder \'{reminder['description']}\' is up. Please remind accordingly. Notify the user by tagging their username.'
-	instance = get_instance(instance_id)
-	instance.add_user_message(message)
 
-	async with Client.typing(instance):
-		response = await Assistant.get_response(instance)
+# A reminder this much past its due time is called late in the prompt, so the model can say so.
+LATE_AFTER_SECONDS = 120
+
+def _late_text(seconds):
+	minutes = round(seconds / 60)
+	if minutes < 60:
+		return f'{minutes} minutes'
+	hours, minutes = divmod(minutes, 60)
+	if hours < 48:
+		return f'{hours} h {minutes} min'
+	return f'{hours // 24} days'
+
+# Called by the reminder scheduler. It runs a normal turn so the reminder is worded in the chat's persona, and
+# raises if the reminder did not reach the chat, which makes the scheduler retry it later. If only the LLM is
+# down the reminder is still sent, as plain text.
+async def on_reminder(reminder, late_seconds=0):
+	instance = get_instance(reminder['chat_id'])
+	message = f'API: The reminder \'{reminder["description"]}\' is up. Please remind accordingly. Notify the user by tagging their username.'
+	if late_seconds >= LATE_AFTER_SECONDS:
+		message += f' It was due {_late_text(late_seconds)} ago (it could not be delivered earlier), so mention that it is late.'
+
+	try:
+		async with Client.typing(instance):
+			# The message is stored by get_response, once it holds the chat lock (see issue #32).
+			response = await Assistant.get_response(instance, message=message, raise_errors=True)
+	except openai.APIError:
+		logging.getLogger(__name__).exception(f'Could not word reminder {reminder["id"]} with the model, sending it as plain text.')
+		response = f'Reminder: {reminder["description"]}'
 	await Client.send_message(instance.unique_id, response)
 
 async def on_message(instance_id, text, images=None, no_response=False):
@@ -115,14 +140,20 @@ async def main():
 	Client.set_instance_model_callback			= set_instance_model
 	Client.toggle_auto_route_callback			= toggle_auto_route
 
-	poll_rate = 1
+	scheduler = None
 	try:
+		await db.init()
 		await Client.init()
-		while True:
-			await TimeManager.poll(on_reminder)
-			await asyncio.sleep(1.0 / poll_rate)
+		scheduler = asyncio.create_task(Reminders.run(on_reminder))
+		# Runs until the program is stopped. The scheduler never returns, so this only ends if it is cancelled or crashes.
+		await scheduler
 	finally:
+		if scheduler:
+			scheduler.cancel()
+			with contextlib.suppress(asyncio.CancelledError):
+				await scheduler
 		await Client.shutdown()
+		await db.close()
 
 if __name__ == "__main__":
 	asyncio.run(main())

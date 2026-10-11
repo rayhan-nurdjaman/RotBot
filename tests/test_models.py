@@ -247,7 +247,7 @@ def test_requests_never_end_with_an_assistant_turn_on_message(monkeypatch):
 
 def test_requests_never_end_with_an_assistant_turn_on_reminder(monkeypatch):
     roles = capture_last_roles(monkeypatch)
-    asyncio.run(main.on_reminder('chat-1', {'description': 'call mom', 'unix_time': 0}))
+    asyncio.run(main.on_reminder({'id': 1, 'chat_id': 'chat-1', 'description': 'call mom'}))
     assert roles == ['user']
 
 

@@ -27,8 +27,8 @@ Logs go to stdout and `app.log`. Stop with Ctrl-C. A bot token must exist (creat
 ## Tests
 
 ```sh
-env/bin/python -m pytest -q               # 130 tests, about 1 second, no network
-env/bin/python -m pyflakes src tests      # expect exactly 3 pre-existing warnings in src/
+env/bin/python -m pytest -q               # 169 tests, about 2 seconds, no network
+env/bin/python -m pyflakes src tests      # expect exactly 2 pre-existing warnings in src/
 ```
 
 Layout (`tests/`):
@@ -44,7 +44,9 @@ Layout (`tests/`):
 | `test_logging.py` | The `llm_call` line, image-only message logging |
 | `test_registry.py` | Registry: schema generation, strict mode, validation, result shape, prompt section |
 | `test_memory.py` | Memory save, per-chat isolation, persistence, trailing-message placement |
-| `test_reminders.py` | Setting (including an impossible date), firing once, `on_reminder` |
+| `test_reminders.py` | Reminder store and scheduler (fake clock, temp database): ordering, wake-up, late-on-startup, retry and `failed`, restart, cancel; the three tools (ISO parsing, offsets, DST, past times, chat scoping); `on_reminder` delivery and the lock |
+| `test_clock.py` | Timezone, `stamp()`, message timestamps |
+| `test_db.py` | `db.init`, migrations, failed migration, newer database refused |
 | `test_client.py` | Stickers and photo failures in `client.on_message` |
 | `test_main.py` | `get_instance`, unknown personality, always-on stub |
 
@@ -52,7 +54,7 @@ Layout (`tests/`):
 
 - **No test calls Telegram or OpenRouter.** LLM calls are replaced by fakes (`monkeypatch.setattr(Assistant.ChatCompletion, 'create', fake)`) or the module's `openai_client` is replaced with a stand-in. Fakes **must match the real signature** `create(messages, model, tools=None, chat_id=None, tool_choice=None)`; changing the signature breaks every fake, which is intended.
 - **`instance.memory_file` is redirected to a temp path** (`monkeypatch.setattr('instance.memory_file', ...)`). A test that makes an `Instance` and saves memory without this writes to the real `data/memory.json`. In the suite, memory tests use an `autouse` fixture; other tests that save memory do their own redirect. Do the same in new tests.
-- **`main.instances` and `TimeManager.reminders` are module-level dicts** shared between tests. Tests reset them with `monkeypatch.setattr(main, 'instances', {})`.
+- **`main.instances` is a module-level dict** shared between tests. Tests reset it with `monkeypatch.setattr(main, 'instances', {})`. Tests that need the database call `db.init(tmp_path)` and `db.close()` themselves, and control time with `monkeypatch.setattr(clock, 'now', ...)`.
 - **`client.application`** is built at import with a dummy token. Replace the whole `application` attribute (or `Client.send_message` etc.) rather than assigning to `application.bot.<method>`, which PTB forbids.
 - Test code uses `asyncio.run(...)` per test; there is no pytest-asyncio.
 - Some tests derive expectations from the config (`Assistant.max_tool_steps`, `config['context_trim_fraction']`), so they follow value changes in `config/config.yaml`.

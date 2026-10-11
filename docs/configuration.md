@@ -28,7 +28,7 @@ Loaded into the dict `config.config` by `src/config.py` when first imported. Eve
 | `llm_max_retries` | 2 | SDK retries for timeouts, connection errors, 408, 409, 429, 5xx (exponential backoff). |
 | `tool_timeout_s` | 30 | Per tool call. A timed-out tool returns an error to the model. |
 
-There is no per-model, per-chat or per-persona config. Removed keys (do not re-add without wiring them up): `poll_rate`, `client_backend`, `assistant_backend`. The reminder poll rate is hardcoded in `main.main()` as `poll_rate = 1` (once per second). Tests read these values through the `config` dict, so changing a value in the file can change test expectations that are derived from it.
+There is no per-model, per-chat or per-persona config. Removed keys (do not re-add without wiring them up): `poll_rate`, `client_backend`, `assistant_backend`. The reminder scheduler has no config: its timings (`MAX_ATTEMPTS`, `RETRY_DELAYS`, `MAX_SLEEP`, `CRASH_RETRY`) are constants in `src/reminders.py`. Tests read these values through the `config` dict, so changing a value in the file can change test expectations that are derived from it.
 
 ## Personalities (`config/personality/`)
 
@@ -60,9 +60,9 @@ A persona file may omit any key; omitted keys keep the value from the previously
 
 `Instance.set_personality(key)` sets `self.personality = key`, then loads that key's file and overlays its values on the current ones.
 
-`Instance.__init__` intends the default persona to be `rotbot`: it sets `self.personality = 'rotbot'`, calls `set_personality('base')`, then calls `set_personality(self.personality)`. But the first call has already overwritten `self.personality` with `'base'`, so the second call loads `base` again. **Verified: a new instance runs as `base`** (no custom instruction, `context_length` 8), not as `rotbot` (4,085-character custom instruction, `context_length` 24). Run `/schizo rotbot` to get the rotbot persona. See [known-issues.md](known-issues.md) item 4.
+`Instance.__init__` intends the default persona to be `rotbot`: it sets `self.personality = 'rotbot'`, calls `set_personality('base')`, then calls `set_personality(self.personality)`. But the first call has already overwritten `self.personality` with `'base'`, so the second call loads `base` again. **Verified: a new instance runs as `base`** (no custom instruction, `context_length` 8), not as `rotbot` (4,085-character custom instruction, `context_length` 24). Run `/schizo rotbot` to get the rotbot persona. See [known-issues.md](known-issues.md) item 2.
 
-`/schizo <name>` (via `main.set_instance_personality`) loads `base` first, then the requested persona, so that traits from a previous persona do not stack. It does **not** clear the conversation history. Earlier messages written in the old persona stay in the context and can influence the new one (few-shot contamination; the README TODO mentions compaction as a future idea). On an unknown name it replies `The personality '<name>' does not exist.` but, because the function sets `instance.personality` and loads `base` before it looks the name up, **the chat has by then been reset to base and its `personality` attribute holds the unknown name** (verified; see known-issues item 4).
+`/schizo <name>` (via `main.set_instance_personality`) loads `base` first, then the requested persona, so that traits from a previous persona do not stack. It does **not** clear the conversation history. Earlier messages written in the old persona stay in the context and can influence the new one (few-shot contamination; the README TODO mentions compaction as a future idea). On an unknown name it replies `The personality '<name>' does not exist.` but, because the function sets `instance.personality` and loads `base` before it looks the name up, **the chat has by then been reset to base and its `personality` attribute holds the unknown name** (verified; see known-issues item 2).
 
 The system prompt text itself contains: identity and role (RotBot, username `rotrot_botbot`, replies in group chats formatted as `<username>: <message>`), brevity and Markdown guidance, a source-citing format, a capabilities list (vision at 512 by 512), a `# Tools` section, a `# Time` section (explains the `[date time]` stamp on each user message, with the `{timezone}` placeholder filled from `config.yaml`), and a memory paragraph pointing to the `API: Memory` message that follows the system prompt. The `# Tools` section is the placeholder `{tools}` in `base.yaml`, replaced in `Instance.get_system_prompt` by the list generated from the tool registry (see [`tools.md`](tools.md)). Nothing to update by hand when a tool changes.
 
@@ -91,5 +91,6 @@ Command replies are written by `main.py` and wrapped in underscores (Telegram it
 |---|---|---|
 | `app.log` | `main.py` logging | All log output, including every user message and bot reply (INFO) and one `llm_call` line per LLM call. Not rotated. Gitignored. |
 | `data/memory.json` | first `save_to_memory` | Per-chat memory. Gitignored (`data`). |
+| `data/rotbot.db` | startup (`db.init()`) | SQLite database. Currently only the `reminders` table. Gitignored (`data`). Deleting it deletes every pending reminder. |
 
 `data/` and `app.log` are gitignored. Deleting `data/memory.json` deletes all memory.

@@ -51,12 +51,12 @@ The stored text is `"[<date> <weekday> <HH:MM>] <telegram username>: <text>"`, f
 
 ```json
 {"role": "assistant", "tool_calls": [
-  {"id": "call_a", "type": "function", "function": {"name": "set_reminder", "arguments": "{\"description\": \"...\", \"year\": 2026, ...}"}},
+  {"id": "call_a", "type": "function", "function": {"name": "set_reminder", "arguments": "{\"description\": \"...\", \"when\": \"2026-10-12T09:30:00\"}"}},
   {"id": "call_b", "type": "function", "function": {"name": "save_to_memory", "arguments": "{\"user_info\": \"...\"}"}}
  ],
  "reasoning_details": [ ... ]      // only if the model returned any; see below
 }
-{"role": "tool", "tool_call_id": "call_a", "content": "{\"ok\": true, \"state\": \"Reminder successfully created\", ...}"}
+{"role": "tool", "tool_call_id": "call_a", "content": "{\"ok\": true, \"id\": 1, \"description\": \"...\", \"when\": \"2026-10-12T09:30+08:00\"}"}
 {"role": "tool", "tool_call_id": "call_b", "content": "{\"state\": \"Information successfully saved.\", \"memory\": \"...\"}"}
 ```
 

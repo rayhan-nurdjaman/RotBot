@@ -6,7 +6,7 @@ All code is in `src/`. Modules import each other by bare name (`import client as
 
 | File | Responsibility | Imports (internal) |
 |---|---|---|
-| `src/main.py` | Entry point, composition, and all chat-level logic: instance registry, message and reminder handlers, command handlers, the reminder polling loop. | `client`, `assistant`, `always_on`, `instance`, `models`, `tools.time_manager` |
+| `src/main.py` | Entry point, composition, and all chat-level logic: instance registry, message and reminder handlers, command handlers, startup and shutdown of the database and the reminder scheduler. | `client`, `assistant`, `always_on`, `instance`, `models`, `db`, `reminders` |
 | `src/client.py` | Everything Telegram: receives updates, sends messages, typing indicator, registers handlers. Calls back into `main` through module-level callback variables. **Builds the Telegram `Application` at import time**, so `TELEGRAM_API_KEY` must be set before importing it. | none |
 | `src/assistant.py` | The agent loop: calls the model, runs tools, stores tool rounds, handles errors and finish reasons. Also `encode_image`. | `chat_completion`, `config`, `router`, `client`, `tools.native`, `tools.registry` |
 | `src/chat_completion.py` | The only module that talks to OpenRouter. Builds the request, logs one `llm_call` line per call. | `config` |
@@ -15,8 +15,10 @@ All code is in `src/`. Modules import each other by bare name (`import client as
 | `src/router.py` | `route(instance)`: stub that picks a model spec when auto routing is on. | `models` |
 | `src/always_on.py` | `should_respond(context)`: stub that always returns `True`. | none |
 | `src/tools/registry.py` | The tool registry: `@tool` decorator, schema generation, Pydantic argument validation, the standard result shape, `ToolContext`, `ToolError`. | `pydantic` |
-| `src/tools/native.py` | The built-in tools (`save_to_memory`, `set_reminder`) and the declaration of the OpenRouter server tools `web_search` and `web_fetch`. Importing it registers them. | `registry`, `time_manager` |
-| `src/tools/time_manager.py` | `get_time`, `add_reminder`, the in-memory reminder store and `poll`. | none |
+| `src/tools/native.py` | The built-in tools (`save_to_memory`, `set_reminder`, `list_reminders`, `cancel_reminder`) and the declaration of the OpenRouter server tools `web_search` and `web_fetch`. Importing it registers them. | `registry`, `reminders`, `clock` |
+| `src/reminders.py` | The reminder store (add, list, cancel) and the scheduler task that delivers due reminders with retries. | `db`, `clock` |
+| `src/db.py` | The shared SQLite connection (`aiosqlite`) and numbered migrations. | none |
+| `src/clock.py` | The configured timezone, `now()`, `stamp()`. Tests replace `now`. | `config` |
 | `src/config.py` | Loads `config/config.yaml` into the dict `config`. | none |
 
 Not code: `config/` (settings, personalities, tool schemas), `tests/`, `unused/` (retired features, see below), `docs/`.
@@ -31,7 +33,10 @@ flowchart TD
     main --> assistant[assistant.py]
     main --> instance[instance.py]
     main --> always_on[always_on.py]
-    main --> time_manager[tools/time_manager.py]
+    main --> reminders[reminders.py]
+    main --> db[db.py]
+    reminders --> db
+    reminders --> clock[clock.py]
     client -. callbacks .-> main
     assistant --> chat_completion[chat_completion.py]
     assistant --> router[router.py]
@@ -39,7 +44,7 @@ flowchart TD
     assistant --> native[tools/native.py]
     instance --> native
     native --> registry
-    native --> time_manager
+    native --> reminders
     instance --> models[models.py]
     router --> models
     chat_completion --> config[config.py]
@@ -57,9 +62,9 @@ Two things to notice:
 1. `main.py` configures logging (to `app.log` and stdout).
 2. `load_dotenv()` reads `.env`.
 3. Imports run. **Importing `client` creates the Telegram `Application` immediately**, which raises `telegram.error.InvalidToken` if `TELEGRAM_API_KEY` is missing or empty. Importing `chat_completion` creates the OpenAI client pointed at OpenRouter. Importing `tools.native` registers the tools, and `assistant` builds the tool list from the registry. Importing `instance` reads `config/personality/index.yaml`.
-4. `main()` assigns the five callbacks on `client`, then `Client.init()` starts polling Telegram.
-5. A loop runs forever: `TimeManager.poll(on_reminder)` then sleep 1 second.
-6. On exit, `Client.shutdown()`.
+4. `main()` assigns the five callbacks on `client`, opens the database (`db.init()`, which creates `data/rotbot.db` and applies migrations), then `Client.init()` starts polling Telegram.
+5. The reminder scheduler task (`reminders.run(on_reminder)`) starts and runs forever. Reminders that came due while the bot was down are delivered first.
+6. On exit, the scheduler is cancelled, then `Client.shutdown()`, then `db.close()`.
 
 If the token is rejected by Telegram (a syntactically valid but wrong token), startup fails with `InvalidToken: Unauthorized`, followed by a second, misleading `RuntimeError: This Updater is not running!` from the shutdown in `finally`. The first error is the real one.
 
@@ -103,14 +108,14 @@ In words:
 2. **`main.on_message`**. Adds the user message to the instance (resizing and base64-encoding any image). Returns early if `no_response` is set, or the chat's `always_on` flag is off, or `should_respond` says no. Otherwise runs the turn inside the typing indicator and sends the reply.
 3. **`assistant.get_response`**. Described fully in [`agent-loop.md`](agent-loop.md).
 
-The reminder path is the same from step 2: `main.on_reminder` adds an `API: The reminder '...' is up...` **user** message to the instance, runs a turn, and sends the reply.
+The reminder path is the same from step 2: the scheduler calls `main.on_reminder`, which runs a turn with an `API: The reminder '...' is up...` message (stored by `get_response` under the chat lock) and sends the reply.
 
 ## Concurrency model
 
 - Everything runs on **one asyncio event loop**. There are no threads.
-- python-telegram-bot is used with its default `max_concurrent_updates = 1` (verified): **updates are handled strictly one at a time**, in order. A long turn in one chat therefore blocks message handling for **all** chats until it finishes (up to many seconds, plus tool time). The per-instance `asyncio.Lock` in `get_response` is a second layer that matters only if this concurrency is ever raised, or if reminders (which run from the polling loop, not from a Telegram update) overlap with a user message.
+- python-telegram-bot is used with its default `max_concurrent_updates = 1` (verified): **updates are handled strictly one at a time**, in order. A long turn in one chat therefore blocks message handling for **all** chats until it finishes (up to many seconds, plus tool time). The per-instance `asyncio.Lock` in `get_response` is a second layer that matters only if this concurrency is ever raised, or if reminders (which run from the scheduler task, not from a Telegram update) overlap with a user message; the reminder side takes the lock before storing its message.
 - Within a turn, the tool calls from one model response run **concurrently** (`asyncio.gather`), each with its own timeout. Results are stored in the order the model made the calls, not the order they finished.
-- The reminder polling loop and the Telegram update handler run on the same loop. A slow turn started by a reminder delays the next poll.
+- The reminder scheduler and the Telegram update handler run on the same loop. A slow reminder turn delays the other reminders (they are delivered one at a time), not Telegram updates.
 
 ## Message formats at the boundaries
 

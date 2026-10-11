@@ -39,7 +39,9 @@ All schemas are strict (`"strict": true`, `"additionalProperties": false`, every
 | Tool | Parameters | Returns (inside `ok: true`) | Needs |
 |---|---|---|---|
 | `save_to_memory` | `user_info: string` (a complete sentence) | `{"state": "Information successfully saved.", "memory": "<the text>"}` | nothing |
-| `set_reminder` | `description: string`, `year, month, day, hour, minute, second` (all `integer`) | `{"state": "Reminder successfully created", "description", "when"}`; `ok: false` on an impossible date | nothing |
+| `set_reminder` | `description: string`, `when: string` (ISO 8601) | `{"id", "description", "when"}` (`when` echoed in the configured zone, e.g. `2026-10-12T09:30+08:00`); `ok: false` for text that is not ISO 8601 or a time not in the future | the chat's reminders |
+| `list_reminders` | none | `{"reminders": [{"id", "description", "when"}, ...]}`, this chat's waiting reminders, soonest first | the chat's reminders |
+| `cancel_reminder` | `id: integer` | `{"cancelled": <id>}`; `ok: false` if the chat has no waiting reminder with that id | the chat's reminders |
 
 Plus two **server tools** run by OpenRouter (next section): `web_search` and `web_fetch`.
 
@@ -49,7 +51,7 @@ Plus two **server tools** run by OpenRouter (next section): `web_search` and `we
 
 There is no `get_time` tool: the model reads the time from the timestamp on each user message (see [`caching-and-server-tools.md`](caching-and-server-tools.md)). The timezone is one global setting, `timezone` in `config/config.yaml` (default `Asia/Singapore`), read by `src/clock.py`.
 
-**`set_reminder`** validates the date with `datetime(...)` (rejecting impossible dates), interprets it as UTC+8, converts to a Unix timestamp, and appends `{"unix_time", "description"}` to the in-memory `reminders[chat_id]` list. **A reminder in the past is accepted** and fires on the next poll (within about a second). Reminders are lost on restart. The tool also sends a `REMINDER_CREATED` indicator, which currently does nothing (see [`telegram-client.md`](telegram-client.md)).
+**`set_reminder`** parses `when` with `datetime.fromisoformat` (so `Z` and offsets like `+08:00` work). A string **without an offset is read in the configured timezone** (`clock.zone`); one with an offset keeps it. The moment is stored as Unix seconds in UTC, so DST and a later change of the `timezone` setting do not move it. A time that is not strictly in the future is rejected, and the error includes the current time so the model can retry. The reminder is stored with `chat_id`, the description, and `created_by` NULL (see [known-issues.md](known-issues.md)). **`list_reminders`** and **`cancel_reminder`** only ever see the calling chat's reminders; the id of another chat's reminder is reported as not found. Reminder logic is in `src/reminders.py`, the tools in `src/tools/native.py` are thin wrappers.
 
 ## Server tools (`web_search`, `web_fetch`)
 
@@ -71,7 +73,19 @@ What to know:
 
 ### How reminders fire
 
-`main.main()` runs `TimeManager.poll(on_reminder)` once per second. For each chat, each reminder whose `unix_time` is **earlier than** now (`<`, so a reminder due this exact second fires on the next poll) is passed to `on_reminder`, then removed. `on_reminder` stores an `API: The reminder '<description>' is up. Please remind accordingly. Notify the user by tagging their username.` **user** message, runs a normal turn, and sends the reply. The reminder is removed after `on_reminder` returns; if `on_reminder` raises, the exception escapes `poll` and ends the program (see [known-issues.md](known-issues.md)).
+`src/reminders.py` holds the store (the SQLite `reminders` table, created by migration 1 in `src/db.py`) and the scheduler. `main.main()` calls `db.init()`, then starts `reminders.run(main.on_reminder)` as one task, and cancels it on shutdown before `db.close()`.
+
+**Scheduler loop (`run`).** Deliver everything due (`process_due`), then sleep until the next pending reminder is due, at most `MAX_SLEEP` (60 s, so a jumped wall clock costs at most a minute). The sleep waits on an `asyncio.Event` that `reminders.add` sets, so a reminder due sooner than the one being waited for wakes it at once. There is no per-second polling. If anything inside an iteration raises, it is logged and the loop retries after `CRASH_RETRY` (30 s); only cancellation ends it (this was issue #33).
+
+**Delivery.** `process_due` selects `status = 'pending' AND attempt_at <= now`, oldest first, and calls `deliver(reminder, late_seconds)` for each one, one at a time. Before each call it re-checks the status, so a reminder cancelled while an earlier one was being delivered is skipped.
+- **Success:** status becomes `done`. It is marked done only **after** `deliver` returns, which makes delivery **at-least-once**: a crash between sending and marking done delivers it again after restart.
+- **Failure (any exception):** `attempts` goes up and `attempt_at` moves back by `RETRY_DELAYS` (30 s, 2 min, 10 min, 30 min). After `MAX_ATTEMPTS` (5) failures the status becomes `failed` and a CRITICAL line is logged. One failing reminder never blocks the others.
+- **Statuses:** `pending` (waiting or retrying), `done`, `failed`, `cancelled`.
+- **Restart:** the table is the only source of truth, so reminders due while the bot was down are delivered on the first pass after startup, with `late_seconds` set.
+
+**`main.on_reminder(reminder, late_seconds)`** is the `deliver` callback. It runs a normal turn so the reminder is worded in the persona: `Assistant.get_response(instance, message="API: The reminder '<description>' is up. Please remind accordingly. Notify the user by tagging their username.", raise_errors=True)`, then sends the reply to the chat. If `late_seconds` is 120 or more, the message also says how late it is and asks the model to mention that. The `API:` message is stored under the chat lock (see [`agent-loop.md`](agent-loop.md)). If the LLM call fails (`openai.APIError`), it sends `Reminder: <description>` as plain text instead. If sending to Telegram fails, the exception propagates, and the scheduler retries later.
+
+**Known limits.** Chat ids are stored as given (`INTEGER NOT NULL`; SQLite keeps an integer-looking value as an integer). Reminder messages stay in the conversation history like any other, and a reminder is only delivered once the chat's instance exists in memory (it is created on demand with an empty history, so a restarted bot words the reminder without the earlier conversation). `usage.server_tool_use_details` is not logged.
 
 ## No status messages
 
