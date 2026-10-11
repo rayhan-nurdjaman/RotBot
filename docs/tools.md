@@ -40,9 +40,9 @@ All schemas are strict (`"strict": true`, `"additionalProperties": false`, every
 |---|---|---|---|
 | `save_to_memory` | `user_info: string` (a complete sentence) | `{"state": "Information successfully saved.", "memory": "<the text>"}` | nothing |
 | `get_time` | none | `{"time": "YYYY-MM-DD HH:MM:SS.ffffff", "day": "Sunday"}` in **UTC+8** (hardcoded, one global setting) | nothing |
-| `web_search` | `search_term: string` | `{"results": [[title, url, snippet], ...]}`; `ok: false` ("Unable to get results.") on any failure | `GOOGLE_API_KEY`, `GOOGLE_SEARCH_ENGINE_ID` |
-| `get_url_text` | `url: string` | `{"text": str, "links": [{"url", "alias"}]}`; `ok: false` ("Unable to fetch website") on any failure | network |
 | `set_reminder` | `description: string`, `year, month, day, hour, minute, second` (all `integer`) | `{"state": "Reminder successfully created", "description", "when"}`; `ok: false` on an impossible date | nothing |
+
+Plus two **server tools** run by OpenRouter (next section): `web_search` and `web_fetch`.
 
 ### Behaviour of each
 
@@ -50,11 +50,25 @@ All schemas are strict (`"strict": true`, `"additionalProperties": false`, every
 
 **`get_time`** returns the current time shifted by a fixed `+8` hours (`tools/time_manager.zone_offset`, "Singapore"). There is no per-user or per-chat timezone. The time string includes microseconds (`str(datetime)`). Reminders use the same offset.
 
-**`web_search`** calls the Google Custom Search JSON API and returns `[title, link, snippet]` for each result. **If the Google keys are missing, the request fails and the tool returns `ok: false` with "Unable to get results."**, which the model may relay as "search is not working" (previously it looked like an empty result list). The keys are read once at import (`os.getenv`), after `.env` loads in `main.py`. They are **not** listed in `.env.example`.
-
-**`get_url_text`** fetches the URL with a desktop User-Agent, and returns the page's visible text **and every link on the page**. There is no size limit and no summarising (the old `query` parameter was removed because it was ignored). **A large page produces a huge result**: Wikipedia's Python article returned 92,000 characters of text and 2,241 links, roughly 70,000 tokens (estimated as characters divided by 4; the text and link counts are measured), which is added to the context and re-sent (at cache-read price after the first time) until trimmed. There is no check that the URL is public: **the model (and so any user) can make the server fetch internal addresses** (SSRF). The only timeout is the 30 s tool timeout.
-
 **`set_reminder`** validates the date with `datetime(...)` (rejecting impossible dates), interprets it as UTC+8, converts to a Unix timestamp, and appends `{"unix_time", "description"}` to the in-memory `reminders[chat_id]` list. **A reminder in the past is accepted** and fires on the next poll (within about a second). Reminders are lost on restart. The tool also sends a `REMINDER_CREATED` indicator, which currently does nothing (see [`telegram-client.md`](telegram-client.md)).
+
+## Server tools (`web_search`, `web_fetch`)
+
+Declared in `src/tools/native.py` with `registry.server_tool('openrouter:...', description, **parameters)`. They are added to the `tools` list after the function tools (`registry.schemas()`), and **OpenRouter runs them inside the same request**: the model calls them, OpenRouter executes them, and the model continues, all before we get a response. There is no handler in this program, and the call is invisible to the loop (`finish_reason` is `stop`, `tool_calls` is empty, and the `llm_call` log line shows no tool name).
+
+| Tool | Configured as | Cost | Notes |
+|---|---|---|---|
+| `web_search` | `engine: exa`, `max_results: 3`, `max_characters: 1500`, `max_uses: 3` | about $0.007 per search (Exa) plus tokens | Results come back as `message.annotations` (`url_citation`) and as the model's cited text. |
+| `web_fetch` | `max_uses: 3`, `max_content_tokens: 10000` | tokens, plus at most $0.001 per fetch depending on the engine OpenRouter picks | Runs on OpenRouter's side, so the bot's host never requests the URL (no SSRF, no page-size blowup). |
+
+What to know:
+
+- **Billing**: to the same OpenRouter key and visible in `llm_call.cost` (a search turn costs about $0.008 on Haiku, a fetch turn under $0.001). The caps (`max_uses`) bound one message. `usage.server_tool_use_details` in the raw response reports `web_search_requests` and `tool_calls_executed`; the program does not log it yet.
+- **Nothing stored**: the search or page text is **not** part of the history we keep. Only the final reply is. A follow-up question about a detail of the page cannot be answered from history, and the model may need to fetch again.
+- **The model can lose track of having used them.** On later turns it sees its own cited reply but no tool call, and when asked it may claim it never searched (reproduced live; a prompt hint did not fix it). It is a wording problem only. See [`known-issues.md`](known-issues.md).
+- **Mixing with function tools in one turn**: a function-tool call made after a server tool in the same turn sees no search in the replayed history, which can confuse the reply (spike on #16).
+- **Privacy**: queries and URLs go to OpenRouter and its backends (Exa for search). Nothing about this is configurable per chat.
+- **Not verified**: that the `max_uses` caps are enforced, and image generation (`openrouter:image_generation`) was deliberately not added.
 
 ### How reminders fire
 

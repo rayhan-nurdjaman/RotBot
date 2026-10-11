@@ -28,6 +28,8 @@ def _validation_message(error):
 class Registry:
 	def __init__(self):
 		self._tools = {}
+		# Tools OpenRouter runs itself (type 'openrouter:...'). Declared in the request, no handler here.
+		self._server_tools = {}
 
 	# Registers an async function as a tool. The first parameter is the ToolContext; every other parameter is
 	# an argument the model supplies. Arguments need a type hint and no default, because strict schemas list every
@@ -70,15 +72,28 @@ class Registry:
 		}
 		return fn
 
-	# The list sent to the model as `tools`. Order is registration order, and must not change while running.
+	# Declares an OpenRouter server tool, e.g. server_tool('openrouter:web_search', 'Searches the web.', max_uses=3).
+	# The model calls it and OpenRouter runs it inside the same request, so the result never reaches our code and
+	# is not part of the history we replay. `description` is only used for the system prompt's Tools section.
+	def server_tool(self, type, description, **parameters):
+		name = type.split(':', 1)[1]
+		if name in self._tools or name in self._server_tools:
+			raise ValueError(f'Tool \'{name}\' is already registered.')
+		schema = {'type': type}
+		if parameters:
+			schema['parameters'] = parameters
+		self._server_tools[name] = {'description': description, 'schema': schema}
+
+	# The list sent to the model as `tools`: function tools, then server tools, each in registration order.
+	# The order is part of the cached prompt prefix, so it must not change while running.
 	def schemas(self):
-		return [tool['schema'] for tool in self._tools.values()]
+		return [tool['schema'] for tool in (*self._tools.values(), *self._server_tools.values())]
 
 	# Numbered list for the "Tools" section of the system prompt, built from the docstrings. Static for the
 	# lifetime of the process, so it is safe inside the cached system prompt.
 	def prompt_section(self):
 		entries = []
-		for number, (name, tool) in enumerate(self._tools.items(), start=1):
+		for number, (name, tool) in enumerate((*self._tools.items(), *self._server_tools.items()), start=1):
 			lines = '\n'.join(f'- {line}' for line in tool['description'].splitlines() if line.strip())
 			entries.append(f'{number}. {name}\n{lines}')
 		return '\n'.join(entries)

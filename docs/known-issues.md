@@ -39,10 +39,9 @@ Separately, `Instance.set_personality` assigns `self.personality = key` **before
 
 No chat allow-list and no per-user permissions anywhere. Anyone who finds the bot (or is in a group that has it) can use it, run `/model opus-5.5-max` (about 40 times the per-token price of the default, and `max` effort uses a lot of reasoning tokens), and toggle `/autoroute`. There is also no spend cap in the program (planned: #14, #31). The only limit is the key limit set in the OpenRouter dashboard. A hostile or curious user can burn it down.
 
-### 6. `get_url_text` can fetch internal URLs and blows up the context
+### 6. Server-tool results are not in the history, so the model may deny having used them
 
-- **SSRF.** Any URL the model is asked to fetch is requested from the server, including `http://localhost:...` and cloud metadata addresses. Not guarded. Only run this bot on a machine where that is acceptable, or add URL validation (planned alternative: OpenRouter's server-side fetch, #16).
-- **No size limit.** A large page returns all its text and every link (measured: 92,000 characters and 2,241 links for one Wikipedia page, an estimated 70,000 tokens). That result is stored in the context. It is re-sent on every request of the turn and until trimmed (a trim only happens by **message count**, so one huge tool message can sit in the context for many turns). With a 1M-token window it fits, but it is expensive and slows later requests.
+`web_search` and `web_fetch` run on OpenRouter (see [`tools.md`](tools.md)). Their calls and results are not in the assistant message we store, only the final cited reply. On a later turn the model sees a reply that cites sources but no tool call, and when asked "did you actually search?" it may answer that it did not, or that it cannot verify (reproduced live on Haiku, including after adding a prompt hint, which was removed because it had no effect). The earlier reply is still correct; only the model's account of how it got there is wrong. Also, a function-tool call after a server-tool call in the same turn does not see the search in the replayed history. Fix directions: store the `annotations` text in the assistant message, or accept it.
 
 ### 7. Long or empty replies can fail to send
 
@@ -82,7 +81,7 @@ The speaker name in history is the Telegram `username`. It is `None` for users w
 | Commented-out token counting | `Instance.add_to_context`, `_set_personality` | Left from before. |
 | `global instances` | `main.get_instance` | Unneeded; pyflakes warns. |
 | `now_utc` unused variable | `tools/time_manager.add_reminder` | pyflakes warns. |
-| Bare `except:` | `client.send_message`, `search_engine`, `time_manager.add_reminder` | Swallow everything, including cancellation. |
+| Bare `except:` | `client.send_message`, `time_manager.add_reminder` | Swallow everything, including cancellation. |
 | `README.md` TODO list | root | Owner's own notes; partly stale. |
 | `unused/` | repo | Retired features. `image_generation.py` still reads `OPENAI_API_KEY`. |
 

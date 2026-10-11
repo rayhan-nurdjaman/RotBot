@@ -14,8 +14,6 @@ env/bin/pip install -r requirements-dev.txt    # runtime deps + pytest + pyflake
 cp .env.example .env                      # then fill in TELEGRAM_API_KEY and OPENROUTER_API_KEY
 ```
 
-Add `GOOGLE_API_KEY` and `GOOGLE_SEARCH_ENGINE_ID` to `.env` if you want `web_search` to work (they are not in `.env.example`).
-
 Set a **hard spend limit on the OpenRouter key** in the OpenRouter dashboard. The program has no cap of its own.
 
 ## Running
@@ -29,7 +27,7 @@ Logs go to stdout and `app.log`. Stop with Ctrl-C. A bot token must exist (creat
 ## Tests
 
 ```sh
-env/bin/python -m pytest -q               # 126 tests, about 1 second, no network
+env/bin/python -m pytest -q               # 130 tests, about 1 second, no network
 env/bin/python -m pyflakes src tests      # expect exactly 3 pre-existing warnings in src/
 ```
 

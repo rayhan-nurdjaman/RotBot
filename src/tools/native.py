@@ -3,11 +3,23 @@ from typing import Annotated
 from pydantic import Field
 
 from tools import time_manager as TimeManager
-from tools import search_engine as SearchEngine
 from tools.registry import registry, tool, ToolError
 
 # Importing this module registers the tools. Other modules import the registry from here so that it is filled.
 __all__ = ['registry']
+
+# Web search and page fetching run on OpenRouter, not here. The model calls them and OpenRouter executes them
+# inside the same request. The caps below bound what one message can spend (the tools are paid per call).
+registry.server_tool(
+	'openrouter:web_search',
+	'Searches the web for current information and returns result excerpts with their urls. Cite the sources you use.',
+	engine='exa', max_results=3, max_characters=1500, max_uses=3,
+)
+registry.server_tool(
+	'openrouter:web_fetch',
+	'Reads the page at a url (use it after searching, or when the user gives a link) and returns its text. Long pages are cut off.',
+	max_uses=3, max_content_tokens=10000,
+)
 
 # The docstring of each tool is sent to the model twice: as the tool description, and in the "Tools" section
 # of the system prompt. Put when to use it and how it combines with other tools in there.
@@ -16,24 +28,6 @@ __all__ = ['registry']
 async def save_to_memory(ctx, user_info: Annotated[str, Field(description='The information to store, provided as a complete sentence.')]):
 	"""Stores non-sensitive user information (e.g., general preferences or hobbies) to enhance future responses and interactions."""
 	return ctx.instance.add_memory(user_info)
-
-@tool
-async def web_search(ctx, search_term: Annotated[str, Field(description='The keyword or phrase used to search the web for relevant content.')]):
-	"""Searches the web to find relevant websites when needed.
-	Returns a list of websites and their info such as their title, url, and brief snippets."""
-	results = await SearchEngine.get_links(search_term)
-	if results == ['Unable to get results']:
-		raise ToolError('Unable to get results.')
-	return {'results': results}
-
-@tool
-async def get_url_text(ctx, url: Annotated[str, Field(description='The website url the AI will read and analyze from.')]):
-	"""Reads the website at the given url and returns its text and outbound links.
-	Use this after 'web_search' if further detail is needed. Can also be chained if the retrieved page has additional links."""
-	result = await SearchEngine.get_text(url)
-	if 'state' in result:
-		raise ToolError(result['state'])
-	return result
 
 @tool
 async def get_time(ctx):

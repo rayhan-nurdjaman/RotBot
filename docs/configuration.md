@@ -12,10 +12,8 @@ Loaded by `load_dotenv()` in `main.py` before the modules that need them are imp
 |---|---|---|---|
 | `TELEGRAM_API_KEY` | **yes** | `client.py` (at import) | Import raises `telegram.error.InvalidToken`. A well-formed but wrong token starts, then fails with `InvalidToken: Unauthorized`; the extra `RuntimeError: This Updater is not running!` after it is a side effect, ignore it. |
 | `OPENROUTER_API_KEY` | **yes** | `chat_completion.py` (at import) | Unset: import raises `OpenAIError`. Empty or wrong: every LLM call fails (HTTP 401) and users see "Something went wrong with that request." |
-| `GOOGLE_API_KEY` | only for `web_search` | `tools/search_engine.py` | `web_search` returns `["Unable to get results"]` (looks like "no results"). **Not in `.env.example`.** |
-| `GOOGLE_SEARCH_ENGINE_ID` | only for `web_search` | `tools/search_engine.py` | Same as above. **Not in `.env.example`.** |
 
-`OPENAI_API_KEY` is no longer read by anything in `src/` (only by retired code in `unused/`). `OPS` (an admin list for the removed `/sql` command) is also unused now.
+`GOOGLE_API_KEY` and `GOOGLE_SEARCH_ENGINE_ID` are no longer used: web search runs on OpenRouter, billed to the same key. `OPENAI_API_KEY` is no longer read by anything in `src/` (only by retired code in `unused/`). `OPS` (an admin list for the removed `/sql` command) is also unused now.
 
 ## `config/config.yaml`
 

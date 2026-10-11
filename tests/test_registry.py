@@ -144,18 +144,50 @@ def test_registration_rules(registry):
         registry.tool(once)
 
 
-def test_native_tools_are_strict_and_have_no_idle_message():
+def test_native_function_tools_are_strict_and_have_no_idle_message():
     from tools.native import registry as native_registry
 
-    names = []
-    for schema in native_registry.schemas():
-        function = schema['function']
-        names.append(function['name'])
+    functions = [s['function'] for s in native_registry.schemas() if s['type'] == 'function']
+    for function in functions:
         parameters = function['parameters']
         assert function['strict'] is True and parameters['additionalProperties'] is False
         assert parameters['required'] == list(parameters['properties'])
         assert 'idle_message' not in parameters['properties']
-    assert names == ['save_to_memory', 'web_search', 'get_url_text', 'get_time', 'set_reminder']
+    assert [f['name'] for f in functions] == ['save_to_memory', 'get_time', 'set_reminder']
+
+
+def test_server_tools_come_after_function_tools_and_are_capped():
+    from tools.native import registry as native_registry
+
+    schemas = native_registry.schemas()
+    assert [s['type'] for s in schemas] == ['function'] * 3 + ['openrouter:web_search', 'openrouter:web_fetch']
+    search, fetch = schemas[3:]
+    assert search['parameters']['max_uses'] and search['parameters']['max_results'] and search['parameters']['max_characters']
+    assert fetch['parameters']['max_uses'] and fetch['parameters']['max_content_tokens']
+
+
+def test_server_tool_schema_and_prompt_line(registry):
+    registry.server_tool('openrouter:datetime', 'Gets the time.', timezone='Asia/Singapore')
+    registry.server_tool('openrouter:web_fetch', 'Fetches.')
+
+    assert registry.schemas() == [
+        {'type': 'openrouter:datetime', 'parameters': {'timezone': 'Asia/Singapore'}},
+        {'type': 'openrouter:web_fetch'},
+    ]
+    assert registry.prompt_section() == '1. datetime\n- Gets the time.\n2. web_fetch\n- Fetches.'
+
+
+def test_server_tools_have_no_handler_so_calling_one_is_an_unknown_tool(registry, ctx):
+    registry.server_tool('openrouter:web_search', 'Searches.')
+
+    assert run(registry.call('web_search', {}, ctx))['ok'] is False
+
+
+def test_server_tool_names_cannot_collide(registry):
+    registry.server_tool('openrouter:web_search', 'Searches.')
+
+    with pytest.raises(ValueError):
+        registry.server_tool('openrouter:web_search', 'Again.')
 
 
 def test_prompt_section_is_generated_from_the_registry(registry):
@@ -182,5 +214,5 @@ def test_system_prompt_lists_every_registered_tool(tmp_path, monkeypatch):
 
     assert '{tools}' not in prompt
     assert native_registry.prompt_section() in prompt
-    for schema in native_registry.schemas():
-        assert schema['function']['name'] in prompt
+    for name in ('save_to_memory', 'get_time', 'set_reminder', 'web_search', 'web_fetch'):
+        assert name in prompt
