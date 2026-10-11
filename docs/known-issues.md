@@ -16,25 +16,19 @@ Everything here was **reproduced or read directly in the code** on commit `3d28d
 
 **Fix direction (not done for user messages).** Do for `main.on_message` what `on_reminder` already does: hand the text to `get_response(instance, message=...)` so it is stored under the lock. Or queue messages (planned in #21).
 
-### 2. A new chat starts as `base`, not `rotbot`; a failed `/schizo` resets the chat
-
-`Instance.__init__` is written to default to the `rotbot` persona but actually runs `base` (see [`configuration.md`](configuration.md)). Verified: a new `Instance` has `personality == 'base'`, empty custom instruction, `context_length` 8.
-
-Separately, `Instance.set_personality` assigns `self.personality = key` **before** looking the key up, and `main.set_instance_personality` calls `set_personality('base')` first. So `/schizo nope` on a chat that was `british` leaves it as `base` with `instance.personality == 'nope'` and `context_length` 8, while telling the user "The personality 'nope' does not exist." The chat lost its persona. Verified. Via Telegram, `/schizo` lowercases the first argument and ignores the rest, so `/schizo British` and `/schizo british extra` both select `british`.
-
-### 3. Unauthenticated access and cost
+### 2. Unauthenticated access and cost
 
 No chat allow-list and no per-user permissions anywhere. Anyone who finds the bot (or is in a group that has it) can use it, run `/model opus-5.5-max` (about 40 times the per-token price of the default, and `max` effort uses a lot of reasoning tokens), and toggle `/autoroute`. There is also no spend cap in the program (planned: #14, #31). The only limit is the key limit set in the OpenRouter dashboard. A hostile or curious user can burn it down.
 
-### 4. Server-tool results are not in the history, so the model may deny having used them
+### 3. Server-tool results are not in the history, so the model may deny having used them
 
 `web_search` and `web_fetch` run on OpenRouter (see [`tools.md`](tools.md)). Their calls and results are not in the assistant message we store, only the final cited reply. On a later turn the model sees a reply that cites sources but no tool call, and when asked "did you actually search?" it may answer that it did not, or that it cannot verify (reproduced live on Haiku, including after adding a prompt hint, which was removed because it had no effect). The earlier reply is still correct; only the model's account of how it got there is wrong. Also, a function-tool call after a server-tool call in the same turn does not see the search in the replayed history. Fix directions: store the `annotations` text in the assistant message, or accept it.
 
-### 5. Long or empty replies can fail to send
+### 4. Long or empty replies can fail to send
 
 `client.send_message` has no splitting. A reply over 4096 characters or an empty reply raises `telegram.error.BadRequest` after the plain-text retry (verified). The raise is not caught in `main.on_message`; the reply is lost and already stored in the context as if sent. `max_tokens` is 16000, so a long answer can exceed the limit. Empty replies are rare because `_finish` substitutes a fallback message for empty content.
 
-### 6. Users without usernames are indistinguishable (and one case crashes)
+### 5. Users without usernames are indistinguishable (and one case crashes)
 
 The speaker name in history is the Telegram `username`. It is `None` for users who have none (text becomes `None: hi`), and two such users look identical to the model. A message with `from_user is None` (anonymous group admin) or a reply to a message with no sender raises `AttributeError` in `client.on_message` (verified). Memory is per chat, so facts saved about "alice" in a group are visible to everyone in it.
 
@@ -43,8 +37,8 @@ The speaker name in history is the Telegram `username`. It is `None` for users w
 - **Commands not registered are answered as chat text.** `/aura` (removed) or `/stfu@another_bot` goes to the model. See [`telegram-client.md`](telegram-client.md).
 - **One timezone for every chat.** `timezone` in `config/config.yaml` (default `Asia/Singapore`) is used for the message timestamps and for reminder times that have no UTC offset. There is no per-chat timezone.
 - **`/stfu` messages enter the context** as `API:` user messages and the model sees them. They are `user` messages, so a long run of them is still valid for the API.
-- **Reminders have no `created_by`.** The column exists but is never filled: a tool only knows the chat, not the sender. The model is told to put the requester's username in the description, and the reminder text tags them from that (same as before the rewrite). Threading the sender through `get_response` into `ToolContext` is the fix if it is ever needed (also see item 6).
-- **Memory has no `created_by` either, and anyone in a chat can edit it.** Same cause as reminders. `/memory` and `/forget` have no permission check (see item 3), so any member can delete a memory another member saved, including standing instructions. A memory is also text the model reads as instructions, so a member can change how the bot behaves for the whole chat by saving one. That is the intended way to change tone or style, but it is also how a prank or a prompt injection persists. Memories are capped (300 characters, 200 per chat, 50 shown) to bound the cost.
+- **Reminders have no `created_by`.** The column exists but is never filled: a tool only knows the chat, not the sender. The model is told to put the requester's username in the description, and the reminder text tags them from that (same as before the rewrite). Threading the sender through `get_response` into `ToolContext` is the fix if it is ever needed (also see item 5).
+- **Memory has no `created_by` either, and anyone in a chat can edit it.** Same cause as reminders. `/memory` and `/forget` have no permission check (see item 2), so any member can delete a memory another member saved, including standing instructions. A memory is also text the model reads as instructions, so a member can change how the bot behaves for the whole chat by saving one. That is the intended way to change tone or style, but it is also how a prank or a prompt injection persists. Memories are capped (300 characters, 200 per chat, 50 shown) to bound the cost.
 - **The secrets filter is a safety net, not a guarantee.** `memories.add` rejects obvious card numbers, `sk-` keys, private key headers and "password is ..." phrasing, and nothing else.
 - **`memory.json` is ignored.** Memory used to be in `data/memory.json`; there is no import. Anyone with an old file has to re-save what matters.
 - **Reasoning is never shown**, and `reasoning` text is not logged either; only `reasoning_tokens` counts appear in `llm_call`.

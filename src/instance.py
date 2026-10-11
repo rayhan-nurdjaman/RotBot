@@ -32,6 +32,10 @@ with open(f'{personality_dir}index.yaml') as stream:
 	yaml = YAML(typ='safe', pure=True)
 	personality_index = yaml.load(stream)
 
+def _read_persona(key):
+	with open(personality_dir + personality_index[key]) as stream:
+		return YAML(typ='safe', pure=True).load(stream)
+
 class Reminder:
 	def __init__(self):
 		self.unix_time
@@ -57,21 +61,21 @@ class Instance:
 		self.context_window		= []
 		self.lock				= asyncio.Lock()
 
-		self.set_personality('base')
 		self.set_personality(self.personality)
 
+	# Layers the persona on `base`, so nothing of the previous persona stays. Everything is read before anything
+	# changes: an unknown key (KeyError) or a missing file (FileNotFoundError) leaves the chat as it was.
 	def set_personality(self, key):
-		self.personality = key
-		file = personality_dir + personality_index[key]
-		with open(file) as stream:
-			yaml = YAML(typ='safe', pure=True)
-			root = yaml.load(stream)
-
+		layers = [_read_persona('base')]
+		if key != 'base':
+			layers.append(_read_persona(key))
+		for root in layers:
 			self.modalities = root['modalities'] if 'modalities' in root else self.modalities
 
 			self.system_prompt = root['system_prompt'] if 'system_prompt' in root else self.system_prompt
 			self.context_length = root['context_length'] if 'context_length' in root else self.context_length
 			self.custom_instruction = root['custom_instruction'] if 'custom_instruction' in root else self.custom_instruction
+		self.personality = key
 
 	# Ordered so the front of the request stays identical between requests, which is what prompt caching needs:
 	# static system prompt, memory (changes only when something is saved), then the append-only history with one

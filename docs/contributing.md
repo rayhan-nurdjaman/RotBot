@@ -27,7 +27,7 @@ Logs go to stdout and `app.log`. Stop with Ctrl-C. A bot token must exist (creat
 ## Tests
 
 ```sh
-env/bin/python -m pytest -q               # 198 tests, about 2 seconds, no network
+env/bin/python -m pytest -q               # 202 tests, about 2 seconds, no network
 env/bin/python -m pyflakes src tests      # expect exactly 2 pre-existing warnings in src/
 ```
 
@@ -48,7 +48,7 @@ Layout (`tests/`):
 | `test_clock.py` | Timezone, `stamp()`, message timestamps |
 | `test_db.py` | `db.init`, migrations, failed migration, newer database refused |
 | `test_client.py` | Stickers and photo failures in `client.on_message` |
-| `test_main.py` | `get_instance`, unknown personality, always-on stub |
+| `test_main.py` | `get_instance`, personalities (new chat is `rotbot`, switching leaves nothing behind, a failed `/schizo` or a missing file changes nothing), always-on stub |
 
 ### How tests avoid the network and real state
 
@@ -104,4 +104,4 @@ When you change behaviour, update the relevant page in the same commit. The "Doc
 
 ## Project management
 
-Issues and milestones are on GitHub (`rayhan-nurdjaman/RotBot`), tracked by issue #30. Milestone 0 (stabilise) is done, Milestone 1 (OpenRouter) is mostly done, Milestone 2 (tools) has the registry, server tools, reminders and memory done and MCP (#17) open, Milestone 3 (architecture) is not started. SQLite persistence (#18) is partly done: reminders and memories are in the database, conversations and per-chat settings are not.
+Issues and milestones are on GitHub (`rayhan-nurdjaman/RotBot`), tracked by issue #30. Milestone 0 (stabilise): its original seven issues are done, two bugs found later (#32, #37) are still open in it, and #34 is fixed. Milestone 1 (OpenRouter) is mostly done, Milestone 2 (tools) is done: the registry, server tools, reminders and memory. MCP (#17) was moved to Milestone 3 on purpose (researched, not started, not a priority: [`mcp.md`](mcp.md)). Milestone 3 (architecture) is not started. SQLite persistence (#18) is partly done: reminders and memories are in the database, conversations and per-chat settings are not.

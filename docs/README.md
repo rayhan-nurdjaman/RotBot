@@ -29,6 +29,7 @@ If you are an agent or a new contributor, read in this order:
 | How do models, efforts, `/model` and `/autoroute` work? What does the OpenRouter request look like? | [`models-and-openrouter.md`](models-and-openrouter.md) |
 | What does config file X contain? What are the env vars, commands, personalities? | [`configuration.md`](configuration.md) |
 | What is the Telegram client's behaviour, and what are its limits? | [`telegram-client.md`](telegram-client.md) |
+| What is known about adding MCP servers (issue #17), and what is the plan? | [`mcp.md`](mcp.md) |
 | What was verified against the real API and what was never run? | [`verification-status.md`](verification-status.md) |
 | What is broken or surprising right now? | [`known-issues.md`](known-issues.md) |
 | How do I set up, run, test, and avoid breaking the cache? | [`contributing.md`](contributing.md) |

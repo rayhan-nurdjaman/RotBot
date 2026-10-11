@@ -93,7 +93,6 @@ async def on_message(instance_id, text, images=None, no_response=False):
 async def set_instance_personality(instance_id, key):
 	instance = get_instance(instance_id)
 	try:
-		instance.set_personality('base')
 		instance.set_personality(key)
 		await Client.send_message(instance.unique_id, f'_Succesfully swapped personality to \'{key}\'_')
 	except (KeyError, FileNotFoundError):
