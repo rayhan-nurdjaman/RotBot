@@ -122,7 +122,7 @@ async def on_message(update, context):
 # Commands
 async def sql(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
 	command = " ".join(context.args)
-	ops = ['username']
+	ops = [op.strip() for op in os.getenv('OPS', '').split(',') if op.strip()]
 	user = update.message.from_user.username
 	if user in ops:
 		with sqlite3.connect("data/database.db") as con:
