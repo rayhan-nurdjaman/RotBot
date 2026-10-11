@@ -1,1 +1,3 @@
 max_tool_steps: 8
+# Shared by reasoning and the visible reply, so it must be generous or a thinking model can run out before answering.
+max_tokens: 16000

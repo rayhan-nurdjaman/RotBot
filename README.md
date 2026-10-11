@@ -1,13 +1,21 @@
 # RotBot
 
-A general client Interface for LLMs (currently ChatGPT on telegram).
+A general client Interface for LLMs (currently Claude 5.5 through OpenRouter, on telegram).
 
 This project consists of a couple of modules
 - Client: This takes care of everything frontend, currently its telegram.
-- Assistant: This takes care of everything backend, currently its chatgpt.
+- Assistant: This takes care of everything backend, currently Claude 5.5 through OpenRouter.
+
+# Setup
+Copy `.env.example` to `.env` and fill in `TELEGRAM_API_KEY` and `OPENROUTER_API_KEY`. Also set a hard spend limit on the OpenRouter key in the OpenRouter dashboard, as a safety net the bot cannot bypass.
+
+# Models
+`/model <model>[-<effort>]` picks the model and reasoning effort together for a chat, e.g. `/model haiku-5.5-high`. Models: `haiku-5.5`, `sonnet-5.5`, `opus-5.5`. Efforts: `low`, `medium`, `high`, `xhigh`, `max`. The default is the cheapest, `haiku-5.5-low`; with no effort given it uses `low`. `/model` alone shows the current one.
+
+`/autoroute` toggles auto routing (off by default). When on, it overrides `/model` and `router.route()` picks the model each turn. That function is currently a stub that always returns the cheapest model.
 
 # Privacy
-Every message the bot can see in a chat, including group messages and photos, is sent to a third-party model provider (currently OpenAI) to generate replies. Message text and replies are also written to `app.log` by the application logger.
+Every message the bot can see in a chat, including group messages and photos, is sent to a third-party model provider (OpenRouter, which forwards it to Anthropic) to generate replies. Message text and replies are also written to `app.log` by the application logger.
 
 # TODO
 - Remove any mention of chat logging or data collection, not important right now.

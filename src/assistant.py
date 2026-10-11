@@ -5,18 +5,18 @@ import json
 import base64
 import asyncio
 from PIL import Image
-from ruamel.yaml import YAML
 
+from config import config
 import tool_manager as ToolManager
 import chat_completion as ChatCompletion
+import router as Router
 
 logger = logging.getLogger(__name__)
 
 with open('config/tools.json') as tools_file:
 	tools = json.loads(tools_file.read())
 
-with open('config/config.yaml') as config_file:
-	max_tool_steps = YAML(typ='safe', pure=True).load(config_file)['max_tool_steps']
+max_tool_steps = config['max_tool_steps']
 
 FALLBACK_MESSAGE = 'Sorry, I was unable to come up with a response.'
 
@@ -24,8 +24,10 @@ FALLBACK_MESSAGE = 'Sorry, I was unable to come up with a response.'
 async def get_response(instance):
 	# One loop per chat at a time, otherwise two quick messages interleave their context.
 	async with instance.lock:
+		# Chosen once per turn so every step of a tool loop uses the same model.
+		model = Router.route(instance) if instance.auto_route else instance.model
 		for _ in range(max_tool_steps):
-			response = await ChatCompletion.create(instance.get_context(), instance.model, tools)
+			response = await ChatCompletion.create(instance.get_context(), model, tools, instance.unique_id)
 			if response.finish_reason != 'tool_calls' or not response.message.tool_calls:
 				return _finish(instance, response)
 
@@ -34,7 +36,7 @@ async def get_response(instance):
 			instance.add_tool_round(calls)
 
 		logger.warning(f'Tool step limit ({max_tool_steps}) reached, forcing a final answer.')
-		return _finish(instance, await ChatCompletion.create(instance.get_context(), instance.model))
+		return _finish(instance, await ChatCompletion.create(instance.get_context(), model, chat_id=instance.unique_id))
 
 # Returns (tool_call_id, tool_name, tool_arguments, tool_response). Never raises; failures go back to the model.
 async def _process_tool_call(instance, tool_call):

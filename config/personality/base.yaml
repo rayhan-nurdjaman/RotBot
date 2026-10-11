@@ -1,5 +1,3 @@
-model               : gpt-4o-mini
-temperature         : 1.0
 context_length      : 8
 modalities          :
    - text

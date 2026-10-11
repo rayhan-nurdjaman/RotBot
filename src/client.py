@@ -22,6 +22,8 @@ application = telegram.ext.Application.builder().token(api_key).build()
 on_message_callback					= None
 toggle_always_on_callback			= None
 set_instance_personality_callback	= None
+set_instance_model_callback			= None
+toggle_auto_route_callback			= None
 
 async def _handle_image(update, context):
 	image_max_res = 512
@@ -132,7 +134,18 @@ async def schizo(update: telegram.Update, context: telegram.ext.ContextTypes.DEF
 async def toggle_always_on(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
 	await toggle_always_on_callback(update.message.chat.id)
 
+async def model(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
+	await set_instance_model_callback(update.message.chat.id, ' '.join(context.args))
+
+async def autoroute(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
+	await toggle_auto_route_callback(update.message.chat.id)
+
+# TODO(/usage): not implemented yet, see https://github.com/rayhan-nurdjaman/RotBot/issues/31
+# Any member of a chat can run it, and it shows only that chat's own usage and spend.
+
 application.add_handler(telegram.ext.CommandHandler('stfu', toggle_always_on))
+application.add_handler(telegram.ext.CommandHandler('model', model))
+application.add_handler(telegram.ext.CommandHandler('autoroute', autoroute))
 application.add_handler(telegram.ext.CommandHandler('schizo', schizo))
 application.add_handler(telegram.ext.MessageHandler(telegram.ext.filters.ALL, on_message))
 

@@ -18,6 +18,7 @@ import client as Client
 import assistant as Assistant
 import always_on as AlwaysOn
 from instance import Instance
+from models import parse_model, EFFORTS, MODELS
 
 from tools import time_manager as TimeManager
 
@@ -82,12 +83,37 @@ async def toggle_always_on(instance_id):
 		instance.add_user_message('API: Always On is now disabled. You are not allowed to respond to user messages.')
 		await Client.send_message(instance.unique_id, '_Always On is now Disabled_')
 
+# Model is chosen with /model, e.g. 'haiku-5.5-high'. An empty argument reports the current one.
+async def set_instance_model(instance_id, text):
+	instance = get_instance(instance_id)
+	if not text:
+		await Client.send_message(instance.unique_id, f'_Current model: \'{instance.model}\'_')
+		return
+	try:
+		instance.model = parse_model(text)
+	except ValueError:
+		models = ', '.join(MODELS)
+		await Client.send_message(instance.unique_id, f'_Unknown model \'{text}\'. Use <model> or <model>-<effort>. Models: {models}. Efforts: {", ".join(EFFORTS)}._')
+		return
+	note = ' Auto routing is on and overrides this.' if instance.auto_route else ''
+	await Client.send_message(instance.unique_id, f'_Model set to \'{instance.model}\'.{note}_')
+
+async def toggle_auto_route(instance_id):
+	instance = get_instance(instance_id)
+	instance.auto_route = not instance.auto_route
+	if instance.auto_route:
+		await Client.send_message(instance.unique_id, '_Auto routing is now Enabled, it overrides /model_')
+	else:
+		await Client.send_message(instance.unique_id, f'_Auto routing is now Disabled, using \'{instance.model}\'_')
+
 # Entry point
 async def main():
 	# Client callbacks
 	Client.on_message_callback					= on_message
 	Client.set_instance_personality_callback	= set_instance_personality
 	Client.toggle_always_on_callback			= toggle_always_on
+	Client.set_instance_model_callback			= set_instance_model
+	Client.toggle_auto_route_callback			= toggle_auto_route
 
 	poll_rate = 1
 	try:

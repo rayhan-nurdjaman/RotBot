@@ -36,7 +36,7 @@ class FakeLLM:
         self.active = 0
         self.max_active = 0
 
-    async def create(self, messages, model, tools=None, temp=1.0):
+    async def create(self, messages, model, tools=None, chat_id=None):
         self.calls.append({'messages': list(messages), 'tools': tools})
         self.active += 1
         self.max_active = max(self.max_active, self.active)
@@ -95,8 +95,8 @@ def test_iteration_cap_forces_final_answer_without_tools(instance, monkeypatch):
     # The forced final call is the one made without tools; make it return a real answer.
     original_create = llm.create
 
-    async def create(messages, model, tools=None, temp=1.0):
-        response = await original_create(messages, model, tools, temp)
+    async def create(messages, model, tools=None, chat_id=None):
+        response = await original_create(messages, model, tools, chat_id)
         return final_response('forced') if tools is None else response
 
     llm.create = create

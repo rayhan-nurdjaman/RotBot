@@ -5,6 +5,8 @@ import json
 import asyncio
 from ruamel.yaml import YAML
 
+from models import DEFAULT_MODEL
+
 logger = logging.getLogger(__name__)
 
 personality_index = {}
@@ -35,12 +37,12 @@ class Instance:
 		# Personality
 		self.personality		= 'rotbot'
 		self.modalities			= []
-		self.model 				= None
+		self.model 				= DEFAULT_MODEL # models.ModelSpec, set with /model
+		self.auto_route			= False # when True, router.route() picks the model each turn and self.model is ignored
 		self.system_prompt 		= None
 		self.custom_instruction = None
 		self.enable_vision		= False
 		self.context_length		= 16
-		self.temperature		= 1.0
 
 		self.memory 			= _read_memory_file().get(str(unique_id), [])
 		self.context_window		= []
@@ -57,9 +59,9 @@ class Instance:
 		with open(file) as stream:
 			yaml = YAML(typ='safe', pure=True)
 			root = yaml.load(stream)
-			self.model = root['model'] if 'model' in root else self.model
+
 			self.modalities = root['modalities'] if 'modalities' in root else self.modalities
-			self.temperature = root['temperature'] if 'temperature' in root else self.temperature
+
 			self.system_prompt = root['system_prompt'] if 'system_prompt' in root else self.system_prompt
 			self.context_length = root['context_length'] if 'context_length' in root else self.context_length
 			self.custom_instruction = root['custom_instruction'] if 'custom_instruction' in root else self.custom_instruction
