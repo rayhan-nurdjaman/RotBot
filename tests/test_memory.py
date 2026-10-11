@@ -50,8 +50,10 @@ def test_memory_accumulates():
 
 def test_empty_memory_adds_nothing_to_the_request():
     instance = Instance('chat-1')
-    assert instance.get_volatile_messages() == []
-    assert 'Current memory' not in request_text(instance).replace(system_prompt(instance), '')
+    instance.add_user_message('alice: hi')
+
+    assert instance.get_memory_messages() == []
+    assert [m['role'] for m in instance.get_context()] == ['system', 'user']
 
 
 def test_memory_is_not_in_the_system_prompt_so_it_cannot_break_the_cache():
@@ -61,13 +63,14 @@ def test_memory_is_not_in_the_system_prompt_so_it_cannot_break_the_cache():
     assert system_prompt(instance) == before
 
 
-def test_memory_message_goes_last_and_is_not_stored_in_the_context():
+def test_memory_message_goes_right_after_the_system_prompt_and_is_not_stored_in_the_context():
     instance = Instance('chat-1')
     instance.add_memory('alice likes tea')
     instance.add_user_message('alice: hi')
 
     context = instance.get_context()
 
-    assert context[-1]['role'] == 'user'
-    assert 'alice likes tea' in context[-1]['content'][0]['text']
+    assert [m['role'] for m in context] == ['system', 'user', 'user']
+    assert 'alice likes tea' in context[1]['content'][0]['text']
+    assert 'alice: hi' in context[2]['content'][0]['text']
     assert all('alice likes tea' not in str(m) for m in instance.context_window)

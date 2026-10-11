@@ -113,4 +113,4 @@ def test_trim_cuts_back_to_context_length_when_over_the_chunk():
         instance.add_user_message(f'alice: {i}')
 
     assert len(instance.context_window) == 6
-    assert instance.context_window[-1]['content'][0]['text'] == f'alice: {6 + chunk_of(instance)}'
+    assert instance.context_window[-1]['content'][0]['text'].endswith(f'alice: {6 + chunk_of(instance)}')

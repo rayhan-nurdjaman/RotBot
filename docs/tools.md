@@ -34,12 +34,11 @@ Arguments are validated with Pydantic before the handler runs. Pydantic coerces 
 
 ## Current tools
 
-All schemas are strict (`"strict": true`, `"additionalProperties": false`, every property in `required`, including `get_time` with `"required": []`). Keep it that way when adding tools.
+All schemas are strict (`"strict": true`, `"additionalProperties": false`, every property in `required`; a tool with no arguments has `"required": []`). Keep it that way when adding tools.
 
 | Tool | Parameters | Returns (inside `ok: true`) | Needs |
 |---|---|---|---|
 | `save_to_memory` | `user_info: string` (a complete sentence) | `{"state": "Information successfully saved.", "memory": "<the text>"}` | nothing |
-| `get_time` | none | `{"time": "YYYY-MM-DD HH:MM:SS.ffffff", "day": "Sunday"}` in **UTC+8** (hardcoded, one global setting) | nothing |
 | `set_reminder` | `description: string`, `year, month, day, hour, minute, second` (all `integer`) | `{"state": "Reminder successfully created", "description", "when"}`; `ok: false` on an impossible date | nothing |
 
 Plus two **server tools** run by OpenRouter (next section): `web_search` and `web_fetch`.
@@ -48,7 +47,7 @@ Plus two **server tools** run by OpenRouter (next section): `web_search` and `we
 
 **`save_to_memory`** calls `Instance.add_memory`, which appends to the chat's memory list and rewrites `data/memory.json`. The text comes from the model and is stored as given. See [`context-and-caching.md`](context-and-caching.md) for how memory is shown back. Memory is per chat, not per user.
 
-**`get_time`** returns the current time shifted by a fixed `+8` hours (`tools/time_manager.zone_offset`, "Singapore"). There is no per-user or per-chat timezone. The time string includes microseconds (`str(datetime)`). Reminders use the same offset.
+There is no `get_time` tool: the model reads the time from the timestamp on each user message (see [`caching-and-server-tools.md`](caching-and-server-tools.md)). The timezone is one global setting, `timezone` in `config/config.yaml` (default `Asia/Singapore`), read by `src/clock.py`.
 
 **`set_reminder`** validates the date with `datetime(...)` (rejecting impossible dates), interprets it as UTC+8, converts to a Unix timestamp, and appends `{"unix_time", "description"}` to the in-memory `reminders[chat_id]` list. **A reminder in the past is accepted** and fires on the next poll (within about a second). Reminders are lost on restart. The tool also sends a `REMINDER_CREATED` indicator, which currently does nothing (see [`telegram-client.md`](telegram-client.md)).
 

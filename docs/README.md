@@ -23,6 +23,7 @@ If you are an agent or a new contributor, read in this order:
 | What does term X mean (instance, turn, tool round, tier, breakpoint)? | [`concepts.md`](concepts.md) |
 | Which file does what? What happens when a user sends a message? | [`architecture.md`](architecture.md) |
 | What are the exact message shapes sent to the model? How is context stored, trimmed and cached? | [`context-and-caching.md`](context-and-caching.md) |
+| **Why can nothing come after the history? Why is the time stamped into messages?** (silent cache failure with server tools) | [`caching-and-server-tools.md`](caching-and-server-tools.md) |
 | How does the agent loop work? What happens on errors, timeouts, odd finish reasons? | [`agent-loop.md`](agent-loop.md) |
 | How do I add or change a tool? What tools exist and what do they return? | [`tools.md`](tools.md) |
 | How do models, efforts, `/model` and `/autoroute` work? What does the OpenRouter request look like? | [`models-and-openrouter.md`](models-and-openrouter.md) |

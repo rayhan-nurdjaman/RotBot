@@ -6,6 +6,7 @@ import asyncio
 from ruamel.yaml import YAML
 
 from config import config
+import clock as Clock
 from models import DEFAULT_MODEL
 from tools.native import registry # Importing native registers the tools, which the system prompt lists.
 
@@ -63,8 +64,6 @@ class Instance:
 		self.context_window		= []
 		self.lock				= asyncio.Lock()
 
-		self.zone_offset		= 8
-
 		self.set_personality('base')
 		self.set_personality(self.personality)
 
@@ -82,12 +81,14 @@ class Instance:
 			self.custom_instruction = root['custom_instruction'] if 'custom_instruction' in root else self.custom_instruction
 
 	# Ordered so the front of the request stays identical between requests, which is what prompt caching needs:
-	# static system prompt, append-only history with one cache breakpoint on its last message, then volatile data.
+	# static system prompt, memory (changes only when something is saved), then the append-only history with one
+	# cache breakpoint on its last message. Nothing may come after the history: with server tools in the request,
+	# anything after the breakpoint disables the prompt cache (see docs/caching-and-server-tools.md and issue #41).
 	def get_context(self):
 		window = list(self.context_window)
 		if window:
 			window[-1] = _with_cache_breakpoint(window[-1])
-		return self.get_system_prompt()+window+self.get_volatile_messages()
+		return self.get_system_prompt()+self.get_memory_messages()+window
 
 	# Adding to context; convenience functions
 	def add_to_context(self, message):
@@ -109,6 +110,8 @@ class Instance:
 		}
 
 		if text:
+			# Stamped once, when stored, so the stored text never changes. The model has no clock otherwise.
+			text = f'[{Clock.stamp()}] {text}'
 			message['content'].append(
 				{
 					'type': 'text',
@@ -223,9 +226,9 @@ class Instance:
 		while self.context_window and self.context_window[0]['role'] == 'tool':
 			self.context_window.pop(0)
 
-	# Data that changes between requests goes last, after the cache breakpoint, so it never invalidates the prefix.
-	# Never stored in the context.
-	def get_volatile_messages(self):
+	# Stored memory as a user message right after the system prompt, or nothing if there is none. It only changes
+	# when something is saved, which costs one cache write per save. Never stored in the context.
+	def get_memory_messages(self):
 		if not self.memory:
 			return []
 		entries = '\n'.join(f'- {entry}' for entry in self.memory)
@@ -233,12 +236,12 @@ class Instance:
 			'role': 'user',
 			'content': [{
 				'type': 'text',
-				'text': f'API: Current memory (reference only, not a message from a user; keep responding to the conversation above):\n{entries}'
+				'text': f'API: Memory (reference information, not a message from a user; keep responding to the conversation below):\n{entries}'
 			}]
 		}]
 
 	def get_system_prompt(self):
-		processed_system_prompt = self.system_prompt.replace('{tools}', registry.prompt_section())
+		processed_system_prompt = self.system_prompt.replace('{tools}', registry.prompt_section()).replace('{timezone}', Clock.zone.key)
 		return [
 			{
 				'role': 'system', 

@@ -25,7 +25,7 @@ def breakpoints(messages):
     return found
 
 
-def test_request_order_is_system_then_history_then_volatile_data(instance):
+def test_request_order_is_system_then_memory_then_history(instance):
     instance.add_memory('alice likes tea')
     instance.add_user_message('alice: hi')
     instance.add_assistant_message('hello')
@@ -33,12 +33,12 @@ def test_request_order_is_system_then_history_then_volatile_data(instance):
 
     roles = [m['role'] for m in instance.get_context()]
 
-    assert roles == ['system', 'user', 'assistant', 'user', 'user']
-    assert 'alice likes tea' in instance.get_context()[-1]['content'][0]['text']
+    assert roles == ['system', 'user', 'user', 'assistant', 'user']
+    assert 'alice likes tea' in instance.get_context()[1]['content'][0]['text']
     assert 'alice likes tea' not in instance.get_context()[0]['content'][0]['text']
 
 
-def test_exactly_one_breakpoint_on_the_last_history_message_before_volatile_data(instance):
+def test_exactly_one_breakpoint_on_the_last_message_of_the_request(instance):
     instance.add_memory('alice likes tea')
     instance.add_user_message('alice: hi')
     instance.add_assistant_message('hello')
@@ -46,8 +46,7 @@ def test_exactly_one_breakpoint_on_the_last_history_message_before_volatile_data
 
     context = instance.get_context()
 
-    assert breakpoints(context) == [3]
-    assert 'cache_control' not in context[-1]['content'][0]
+    assert breakpoints(context) == [len(context) - 1]
 
 
 def test_breakpoints_never_leak_into_the_stored_context(instance):

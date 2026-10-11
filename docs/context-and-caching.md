@@ -8,19 +8,21 @@ Implemented in `src/instance.py`. Request assembly happens in `Instance.get_cont
 
 ```
 [ system message ]                       static: base system prompt + persona custom_instruction
+[ memory message ]                       only if the chat has memory; changes only when something is saved
 [ history message 1 ]  \
 [ history message 2 ]   |  instance.context_window, append-only between trims
 [ ...               ]   |
 [ history message N ]  /   <- the LAST one carries the single cache breakpoint (added on a copy)
-[ memory message ]                       volatile, only present if the chat has memory
 ```
+
+**Nothing may come after the history.** With OpenRouter server tools in the request, any message or part after the last history message turns the prompt cache off. See [`caching-and-server-tools.md`](caching-and-server-tools.md) for the measurements. The current time is therefore stamped into each user message when it is stored instead of being sent as a trailing message.
 
 | Part | Source | Changes between requests? |
 |---|---|---|
 | System message | `get_system_prompt()`: `system_prompt` (from `base.yaml`) + `custom_instruction` (from the persona) | Only on `/schizo`. **Never** per request. |
 | Tool list | the tool registry (`registry.schemas()`), sent as the `tools` parameter | Never. |
 | History | `context_window` | Append-only, except when trimmed (see below). |
-| Memory message | `get_volatile_messages()` | When memory is saved. Always last. |
+| Memory message | `get_memory_messages()` | When memory is saved (one cache write each time). Always right after the system prompt. |
 
 The tool list is not part of the `messages` list but is part of the cached prefix on the provider side (Anthropic's documented prefix order is tools, then system, then messages; not independently verified here), so it must never change within a chat's lifetime. **Never add, remove or reorder tools at runtime.**
 
@@ -37,7 +39,7 @@ All follow the OpenAI Chat Completions format.
 ]}
 ```
 
-The text always starts with `"<telegram username>: "` (see [telegram-client.md](telegram-client.md)). Reminder and always-on notices are also stored as `user` messages whose text starts with `API: `. Images are stored inline as base64 and re-sent on every request until trimmed out.
+The stored text is `"[<date> <weekday> <HH:MM>] <telegram username>: <text>"`, for example `[2026-10-11 Sun 21:54] alice: hi`. The timestamp is added by `add_user_message` using `clock.stamp()` (the configured timezone), once, when the message is stored, and never changes afterwards. That is how the model knows the time (see [`caching-and-server-tools.md`](caching-and-server-tools.md)). The username part comes from the client (see [telegram-client.md](telegram-client.md)). Reminder and always-on notices are also stored as `user` messages, stamped the same way, with text starting `API: `. Assistant messages are not stamped. Images are stored inline as base64 and re-sent on every request until trimmed out.
 
 **Assistant text message** (`add_assistant_message`, only stores final answers):
 
@@ -49,12 +51,12 @@ The text always starts with `"<telegram username>: "` (see [telegram-client.md](
 
 ```json
 {"role": "assistant", "tool_calls": [
-  {"id": "call_a", "type": "function", "function": {"name": "get_time", "arguments": "{}"}},
+  {"id": "call_a", "type": "function", "function": {"name": "set_reminder", "arguments": "{\"description\": \"...\", \"year\": 2026, ...}"}},
   {"id": "call_b", "type": "function", "function": {"name": "save_to_memory", "arguments": "{\"user_info\": \"...\"}"}}
  ],
  "reasoning_details": [ ... ]      // only if the model returned any; see below
 }
-{"role": "tool", "tool_call_id": "call_a", "content": "{\"time\": \"2026-10-11 20:40:05\", \"day\": \"Sunday\"}"}
+{"role": "tool", "tool_call_id": "call_a", "content": "{\"ok\": true, \"state\": \"Reminder successfully created\", ...}"}
 {"role": "tool", "tool_call_id": "call_b", "content": "{\"state\": \"Information successfully saved.\", \"memory\": \"...\"}"}
 ```
 
@@ -63,11 +65,11 @@ The text always starts with `"<telegram username>: "` (see [telegram-client.md](
 - `arguments` is a JSON string. If the model's arguments were not valid JSON, `"{}"` is stored and the parse error goes back as the tool result.
 - Tool messages are in the **same order as the calls**, regardless of which tool finished first.
 
-**Memory message** (never stored; produced by `get_volatile_messages()`):
+**Memory message** (never stored; produced by `get_memory_messages()`, placed right after the system prompt):
 
 ```json
 {"role": "user", "content": [{"type": "text", "text":
-  "API: Current memory (reference only, not a message from a user; keep responding to the conversation above):\n- alice likes oat milk"}]}
+  "API: Memory (reference information, not a message from a user; keep responding to the conversation below):\n- alice likes oat milk"}]}
 ```
 
 Memory is saved **per chat, not per person**. In a group chat every member shares one memory list.
@@ -104,7 +106,7 @@ The stored `context_window` is never modified, so breakpoints never accumulate.
 
 ### Why an explicit breakpoint, not the top-level `cache_control`
 
-OpenRouter also accepts a single top-level `"cache_control": {"type": "ephemeral"}` on the request, documented as automatic caching. **Verified live that it does not work for this request shape**: with a volatile memory message after the history, three consecutive requests showed `cached_tokens = 0`. An explicit breakpoint on the last history message hit every time. Caching is not automatic: if the breakpoint or the request order breaks, every request is billed at the full input price and nothing fails visibly. Watch `cached_tokens` in the `llm_call` log line.
+OpenRouter also accepts a single top-level `"cache_control": {"type": "ephemeral"}` on the request, documented as automatic caching. **Verified live that it does not work for this request shape**: with a memory message after the history, three consecutive requests showed `cached_tokens = 0`. (That trailing message was later found to disable caching in any case once server tools are present, with the explicit breakpoint too; see [`caching-and-server-tools.md`](caching-and-server-tools.md).) An explicit breakpoint on the last history message hit every time. Caching is not automatic: if the breakpoint or the request order breaks, every request is billed at the full input price and nothing fails visibly. Watch `cached_tokens` in the `llm_call` log line.
 
 ### Observed cache behaviour (Haiku 5.5, 2026-10-11)
 
@@ -126,7 +128,8 @@ The base system prompt plus the tool list is about 1900 tokens, comfortably abov
 | A trim (every few messages, see above) | One request with a new front. Expected. |
 | Model change (`/model`, auto-route) | Caches are per model; first request on the new model is a write. |
 | Adding a tool or editing a personality while the bot runs | Only affects new `Instance`s and a restart. |
-| Putting per-request data (time, memory, usernames) into the system prompt | **Breaks caching on every request.** Put it in `get_volatile_messages()`. |
+| Putting per-request data (time, memory, usernames) into the system prompt | **Breaks caching on every request.** Stamp it into the stored user message instead. |
+| **Adding anything after the last history message** (a trailing message or part) while a server tool is in the list | **Disables caching entirely (0 reads), silently.** See [`caching-and-server-tools.md`](caching-and-server-tools.md). |
 
 ## Reasoning blocks in the context
 

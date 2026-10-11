@@ -9,3 +9,6 @@ llm_timeout_s: 180
 llm_max_retries: 2
 # Per tool call, in seconds. A timed-out tool returns an error to the model so it can recover.
 tool_timeout_s: 30
+# IANA timezone used to show the current time to the model and to read reminder times that have no UTC offset.
+# One zone for every chat. Times are stored in UTC, so changing this does not move existing reminders.
+timezone: Asia/Singapore

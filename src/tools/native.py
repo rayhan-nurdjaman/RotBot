@@ -30,12 +30,6 @@ async def save_to_memory(ctx, user_info: Annotated[str, Field(description='The i
 	return ctx.instance.add_memory(user_info)
 
 @tool
-async def get_time(ctx):
-	"""The ONLY source of reliable time. Returns the time in YYYY-MM-DD HH:MM:SS format.
-	Useful for reminders or time-sensitive tasks."""
-	return TimeManager.get_time()
-
-@tool
 async def set_reminder(
 	ctx,
 	description: Annotated[str, Field(description='A brief explanation of the purpose or content of the reminder. Make sure to include the username of the requester.')],
@@ -47,7 +41,7 @@ async def set_reminder(
 	second: Annotated[int, Field(description='The second for the reminder (0-59)')],
 ):
 	"""Sets a reminder on the specified year, month, day, hour, minute, and second.
-	Always invoke 'get_time' first to ensure accuracy. Do not call this in parallel to 'get_time', wait for its response first."""
+	Work out the date and time from the current time given in the last message of the conversation."""
 	result = TimeManager.add_reminder(ctx.chat_id, description, year, month, day, hour, minute, second)
 	if 'description' not in result:
 		raise ToolError(result['state'])

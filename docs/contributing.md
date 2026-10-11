@@ -62,7 +62,7 @@ Layout (`tests/`):
 
 Read [`concepts.md`](concepts.md) rules 1 to 11 first. In short:
 
-1. Do not put anything that changes per request into the system prompt, the tool list, or the history. Put it in `get_volatile_messages()`. After a change that touches request assembly, **check `cached_tokens` on a real second request** (see below); no unit test can tell you the provider cache hits.
+1. Do not put anything that changes per request into the system prompt, the tool list, or the history, and **do not add anything after the last history message** (it disables the cache when server tools are present: [`caching-and-server-tools.md`](caching-and-server-tools.md)). Time is stamped into user messages when stored. After a change that touches request assembly, **check `cached_tokens` on a real second request** (see below); no unit test can tell you the provider cache hits.
 2. Do not send `temperature`, forced `tool_choice`, or end a request with an assistant message.
 3. Do not edit `context_window` messages in place except through the `Instance` methods; stored breakpoints and half-written tool rounds break the API.
 4. A tool must never raise out of a turn and must finish within `tool_timeout_s`.

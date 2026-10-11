@@ -15,7 +15,7 @@ All code is in `src/`. Modules import each other by bare name (`import client as
 | `src/router.py` | `route(instance)`: stub that picks a model spec when auto routing is on. | `models` |
 | `src/always_on.py` | `should_respond(context)`: stub that always returns `True`. | none |
 | `src/tools/registry.py` | The tool registry: `@tool` decorator, schema generation, Pydantic argument validation, the standard result shape, `ToolContext`, `ToolError`. | `pydantic` |
-| `src/tools/native.py` | The built-in tools (`save_to_memory`, `get_time`, `set_reminder`) and the declaration of the OpenRouter server tools `web_search` and `web_fetch`. Importing it registers them. | `registry`, `time_manager` |
+| `src/tools/native.py` | The built-in tools (`save_to_memory`, `set_reminder`) and the declaration of the OpenRouter server tools `web_search` and `web_fetch`. Importing it registers them. | `registry`, `time_manager` |
 | `src/tools/time_manager.py` | `get_time`, `add_reminder`, the in-memory reminder store and `poll`. | none |
 | `src/config.py` | Loads `config/config.yaml` into the dict `config`. | none |
 
