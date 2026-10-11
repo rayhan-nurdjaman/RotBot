@@ -48,13 +48,19 @@ def test_personality_switch_does_not_change_model(tmp_path, monkeypatch):
     assert instance.model == parse_model('opus-5.5-high')
 
 
+FAKE_CHOICE = SimpleNamespace(
+    finish_reason='stop',
+    message=SimpleNamespace(content='hi', tool_calls=None),
+)
+
+
 class FakeCompletions:
     def __init__(self):
         self.kwargs = None
 
     async def create(self, **kwargs):
         self.kwargs = kwargs
-        return SimpleNamespace(choices=['choice'])
+        return SimpleNamespace(choices=[FAKE_CHOICE], usage=None)
 
 
 def capture_request(monkeypatch, **call_kwargs):
@@ -62,7 +68,7 @@ def capture_request(monkeypatch, **call_kwargs):
     fake_client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
     monkeypatch.setattr(ChatCompletion, 'openai_client', fake_client)
     result = asyncio.run(ChatCompletion.create([{'role': 'user', 'content': 'hi'}], parse_model('sonnet-5.5-high'), **call_kwargs))
-    assert result == 'choice'
+    assert result is FAKE_CHOICE
     return completions.kwargs
 
 

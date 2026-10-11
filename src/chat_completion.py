@@ -1,7 +1,12 @@
 import os
+import json
+import time
+import logging
 import openai
 
 from config import config
+
+logger = logging.getLogger(__name__)
 # Tool returns should be standardised to JSON
 
 # Message formats here follow OpenAI's style
@@ -82,6 +87,7 @@ async def create(messages, model, tools=None, chat_id=None):
 	if chat_id is not None:
 		kwargs['user'] = str(chat_id)
 
+	start = time.monotonic()
 	response = await openai_client.chat.completions.create(
 		messages=messages,
 		model=model.slug,
@@ -89,4 +95,26 @@ async def create(messages, model, tools=None, chat_id=None):
 		extra_body=extra_body,
 		**kwargs,
 	)
-	return response.choices[0]
+	choice = response.choices[0]
+	_log_call(chat_id, model, choice, response.usage, time.monotonic() - start)
+	return choice
+
+# One JSON line per LLM call, prefixed 'llm_call', so spend and caching can be grepped out of app.log.
+# Token counts and cost come from OpenRouter's usage object; any of them may be missing.
+def _log_call(chat_id, model, choice, usage, latency):
+	completion_details = getattr(usage, 'completion_tokens_details', None)
+	prompt_details = getattr(usage, 'prompt_tokens_details', None)
+	tool_calls = choice.message.tool_calls or []
+	logger.info('llm_call ' + json.dumps({
+		'chat_id': chat_id,
+		'model': model.slug,
+		'effort': model.effort,
+		'prompt_tokens': getattr(usage, 'prompt_tokens', None),
+		'completion_tokens': getattr(usage, 'completion_tokens', None),
+		'reasoning_tokens': getattr(completion_details, 'reasoning_tokens', None),
+		'cached_tokens': getattr(prompt_details, 'cached_tokens', None),
+		'cost': getattr(usage, 'cost', None),
+		'latency_s': round(latency, 3),
+		'tool_calls': [tool_call.function.name for tool_call in tool_calls],
+		'finish_reason': choice.finish_reason,
+	}))

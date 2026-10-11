@@ -107,7 +107,7 @@ class Instance:
 			)
 
 		self.add_to_context(message)
-		logger.info(f'{self.context_window[-1]['content'][0]['text']}\n')
+		logger.info(f'{text or "[image]"}\n')
 
 	def add_assistant_message(self, text):
 		message = {
@@ -121,7 +121,7 @@ class Instance:
 		}
 
 		self.add_to_context(message)
-		logger.info(f'RotBot: {self.context_window[-1]['content']}\n')
+		logger.info(f'RotBot: {text}\n')
 
 	def add_system_message(self, text):
 		message = {
@@ -135,7 +135,7 @@ class Instance:
 		}
 
 		self.add_to_context(message)
-		logger.info(f'RotBot: {self.context_window[-1]['content']}\n')
+		logger.info(f'RotBot: {text}\n')
 
 	# calls: list of (tool_call_id, tool_name, tool_arguments, tool_response), in the order the model made them.
 	# Stored as one assistant message holding every tool call, then one tool message per call.
