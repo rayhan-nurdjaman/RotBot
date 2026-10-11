@@ -5,6 +5,7 @@ import json
 import asyncio
 from ruamel.yaml import YAML
 
+from config import config
 from models import DEFAULT_MODEL
 
 logger = logging.getLogger(__name__)
@@ -12,6 +13,19 @@ logger = logging.getLogger(__name__)
 personality_index = {}
 personality_dir = 'config/personality/'
 memory_file = 'data/memory.json'
+
+# Returns a copy of the message with a cache breakpoint on its last content part, or the message itself if
+# it has no content to attach one to. The stored context is never modified, so breakpoints never pile up.
+def _with_cache_breakpoint(message):
+	content = message.get('content')
+	if isinstance(content, str) and content:
+		parts = [{'type': 'text', 'text': content}]
+	elif isinstance(content, list) and content:
+		parts = [dict(part) for part in content]
+	else:
+		return message
+	parts[-1]['cache_control'] = {'type': 'ephemeral'}
+	return {**message, 'content': parts}
 
 def _read_memory_file():
 	try:
@@ -66,8 +80,13 @@ class Instance:
 			self.context_length = root['context_length'] if 'context_length' in root else self.context_length
 			self.custom_instruction = root['custom_instruction'] if 'custom_instruction' in root else self.custom_instruction
 
+	# Ordered so the front of the request stays identical between requests, which is what prompt caching needs:
+	# static system prompt, append-only history with one cache breakpoint on its last message, then volatile data.
 	def get_context(self):
-		return self.get_system_prompt()+self.context_window
+		window = list(self.context_window)
+		if window:
+			window[-1] = _with_cache_breakpoint(window[-1])
+		return self.get_system_prompt()+window+self.get_volatile_messages()
 
 	# Adding to context; convenience functions
 	def add_to_context(self, message):
@@ -192,15 +211,33 @@ class Instance:
 
 	# Private
 	def _trim_context(self):
-		self.context_window = self.context_window[-self.context_length:]
+		# Trimmed in chunks, not one message at a time: a sliding window changes the front of the history on
+		# every message, so the prompt cache would never hit. The window grows by up to a chunk, then is cut
+		# back to context_length.
+		chunk = max(1, int(self.context_length * config['context_trim_fraction']))
+		if len(self.context_window) > self.context_length + chunk:
+			self.context_window = self.context_window[-self.context_length:]
 		# Trimming only cuts from the front, so the only way to orphan a tool message is for the
 		# window to start inside a group of tool results. Drop those; their tool_calls message is gone.
 		while self.context_window and self.context_window[0]['role'] == 'tool':
 			self.context_window.pop(0)
 
+	# Data that changes between requests goes last, after the cache breakpoint, so it never invalidates the prefix.
+	# Never stored in the context.
+	def get_volatile_messages(self):
+		if not self.memory:
+			return []
+		entries = '\n'.join(f'- {entry}' for entry in self.memory)
+		return [{
+			'role': 'user',
+			'content': [{
+				'type': 'text',
+				'text': f'API: Current memory (reference only, not a message from a user; keep responding to the conversation above):\n{entries}'
+			}]
+		}]
+
 	def get_system_prompt(self):
-		memory = '\n'.join(f'- {entry}' for entry in self.memory) if self.memory else 'None'
-		processed_system_prompt = self.system_prompt.replace('MEMORY', memory)
+		processed_system_prompt = self.system_prompt
 		return [
 			{
 				'role': 'system', 

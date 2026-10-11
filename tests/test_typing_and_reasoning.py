@@ -132,7 +132,7 @@ def install(monkeypatch, responses):
     sent_requests = []
     queue = iter(responses)
 
-    async def create(messages, model, tools=None, chat_id=None):
+    async def create(messages, model, tools=None, chat_id=None, tool_choice=None):
         sent_requests.append(json.loads(json.dumps(messages)))
         return next(queue)
 

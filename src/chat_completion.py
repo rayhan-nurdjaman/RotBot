@@ -77,7 +77,9 @@ openai_client = openai.AsyncOpenAI(
 # model: a models.ModelSpec (slug + reasoning effort). chat_id is the stable id used for provider-sticky
 # routing (session_id) and for grouping requests in the OpenRouter logs (user).
 # Claude 5.5 rejects non-default sampling parameters, so temperature is deliberately not sent.
-async def create(messages, model, tools=None, chat_id=None):
+# tool_choice: only 'none' is used. It forces a text answer while keeping the tool list in the request, because
+# removing tools would change the front of the prompt and invalidate the cache.
+async def create(messages, model, tools=None, chat_id=None, tool_choice=None):
 	extra_body = {'reasoning': {'effort': model.effort}}
 	if chat_id is not None:
 		extra_body['session_id'] = str(chat_id)
@@ -86,6 +88,8 @@ async def create(messages, model, tools=None, chat_id=None):
 	if tools:
 		kwargs['tools'] = tools
 		kwargs['parallel_tool_calls'] = True
+		if tool_choice:
+			kwargs['tool_choice'] = tool_choice
 	if chat_id is not None:
 		kwargs['user'] = str(chat_id)
 

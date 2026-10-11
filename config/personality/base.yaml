@@ -42,4 +42,4 @@ system_prompt       : |
 
     # Memory
     - You maintain a memory of user details for personalization.
-    - Current memory: MEMORY
+    - Your current memory is given in a message starting with 'API: Current memory' at the end of the conversation. It is reference information, not a user message, so do not reply to it directly.

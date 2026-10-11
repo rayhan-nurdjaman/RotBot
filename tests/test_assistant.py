@@ -38,8 +38,8 @@ class FakeLLM:
         self.active = 0
         self.max_active = 0
 
-    async def create(self, messages, model, tools=None, chat_id=None):
-        self.calls.append({'messages': list(messages), 'tools': tools})
+    async def create(self, messages, model, tools=None, chat_id=None, tool_choice=None):
+        self.calls.append({'messages': list(messages), 'tools': tools, 'tool_choice': tool_choice})
         self.active += 1
         self.max_active = max(self.max_active, self.active)
         await asyncio.sleep(0)
@@ -92,14 +92,14 @@ def test_results_keep_call_order_even_if_tools_finish_out_of_order(instance, mon
     assert [json.loads(m['content'])['n'] for m in instance.context_window[1:3]] == [1, 2]
 
 
-def test_iteration_cap_forces_final_answer_without_tools(instance, monkeypatch):
+def test_iteration_cap_forces_a_text_final_answer_without_changing_the_tool_list(instance, monkeypatch):
     llm = FakeLLM([], default=tool_calls_response(tool_call('x')))
     # The forced final call is the one made without tools; make it return a real answer.
     original_create = llm.create
 
-    async def create(messages, model, tools=None, chat_id=None):
-        response = await original_create(messages, model, tools, chat_id)
-        return final_response('forced') if tools is None else response
+    async def create(messages, model, tools=None, chat_id=None, tool_choice=None):
+        response = await original_create(messages, model, tools, chat_id, tool_choice)
+        return final_response('forced') if tool_choice == 'none' else response
 
     llm.create = create
     install(monkeypatch, llm)
@@ -108,8 +108,10 @@ def test_iteration_cap_forces_final_answer_without_tools(instance, monkeypatch):
 
     assert result == 'forced'
     assert len(llm.calls) == Assistant.max_tool_steps + 1
-    assert all(call['tools'] for call in llm.calls[:-1])
-    assert llm.calls[-1]['tools'] is None
+    assert all(call['tool_choice'] is None for call in llm.calls[:-1])
+    # The tool list stays identical (so the prompt cache prefix survives); tool_choice forbids another call.
+    assert all(call['tools'] == Assistant.tools for call in llm.calls)
+    assert llm.calls[-1]['tool_choice'] == 'none'
 
 
 def test_length_finish_returns_partial_content(instance, monkeypatch):
@@ -193,7 +195,7 @@ def api_error(cls, status=None):
     (api_error(openai.BadRequestError, 400), Assistant.REQUEST_MESSAGE),
 ])
 def test_llm_errors_become_short_messages_and_keep_the_users_message(instance, monkeypatch, error, expected):
-    async def create(messages, model, tools=None, chat_id=None):
+    async def create(messages, model, tools=None, chat_id=None, tool_choice=None):
         raise error
 
     monkeypatch.setattr(Assistant.ChatCompletion, 'create', create)
@@ -204,7 +206,7 @@ def test_llm_errors_become_short_messages_and_keep_the_users_message(instance, m
 
 
 def test_insufficient_credits_is_logged_loudly(instance, monkeypatch, caplog):
-    async def create(messages, model, tools=None, chat_id=None):
+    async def create(messages, model, tools=None, chat_id=None, tool_choice=None):
         raise api_error(openai.APIStatusError, 402)
 
     monkeypatch.setattr(Assistant.ChatCompletion, 'create', create)
@@ -216,7 +218,7 @@ def test_insufficient_credits_is_logged_loudly(instance, monkeypatch, caplog):
 def test_error_mid_tool_loop_does_not_leave_a_half_written_round(instance, monkeypatch):
     responses = iter([tool_calls_response(tool_call('a'))])
 
-    async def create(messages, model, tools=None, chat_id=None):
+    async def create(messages, model, tools=None, chat_id=None, tool_choice=None):
         try:
             return next(responses)
         except StopIteration:

@@ -15,6 +15,12 @@ def system_prompt(instance):
     return instance.get_system_prompt()[0]['content'][0]['text']
 
 
+def request_text(instance):
+    return '\n'.join(
+        part['text'] for message in instance.get_context() for part in message['content'] if part['type'] == 'text'
+    )
+
+
 def test_saved_memory_is_visible_to_a_fresh_instance_of_the_same_chat():
     first = Instance('chat-1')
     result = asyncio.run(ToolManager.get_tool_response(first, 'save_to_memory', {'user_info': 'alice likes tea'}))
@@ -23,14 +29,14 @@ def test_saved_memory_is_visible_to_a_fresh_instance_of_the_same_chat():
     assert result['memory'] == 'alice likes tea'
 
     fresh = Instance('chat-1')
-    assert 'alice likes tea' in system_prompt(fresh)
-    assert 'MEMORY' not in system_prompt(fresh)
+    assert 'alice likes tea' in request_text(fresh)
+    assert 'MEMORY' not in request_text(fresh)
 
 
 def test_memory_is_per_chat():
     Instance('chat-1').add_memory('alice likes tea')
 
-    assert 'alice likes tea' not in system_prompt(Instance('chat-2'))
+    assert 'alice likes tea' not in request_text(Instance('chat-2'))
 
 
 def test_memory_accumulates():
@@ -38,9 +44,29 @@ def test_memory_accumulates():
     instance.add_memory('one')
     instance.add_memory('two')
 
-    prompt = system_prompt(Instance('chat-1'))
-    assert '- one\n- two' in prompt
+    assert '- one\n- two' in request_text(Instance('chat-1'))
 
 
-def test_empty_memory_renders_none():
-    assert 'Current memory: None' in system_prompt(Instance('chat-1'))
+def test_empty_memory_adds_nothing_to_the_request():
+    instance = Instance('chat-1')
+    assert instance.get_volatile_messages() == []
+    assert 'Current memory' not in request_text(instance).replace(system_prompt(instance), '')
+
+
+def test_memory_is_not_in_the_system_prompt_so_it_cannot_break_the_cache():
+    instance = Instance('chat-1')
+    before = system_prompt(instance)
+    instance.add_memory('alice likes tea')
+    assert system_prompt(instance) == before
+
+
+def test_memory_message_goes_last_and_is_not_stored_in_the_context():
+    instance = Instance('chat-1')
+    instance.add_memory('alice likes tea')
+    instance.add_user_message('alice: hi')
+
+    context = instance.get_context()
+
+    assert context[-1]['role'] == 'user'
+    assert 'alice likes tea' in context[-1]['content'][0]['text']
+    assert all('alice likes tea' not in str(m) for m in instance.context_window)

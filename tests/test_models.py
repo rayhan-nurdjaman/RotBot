@@ -111,7 +111,7 @@ def make_instance(tmp_path, monkeypatch):
 def run_turn(instance, monkeypatch):
     used = []
 
-    async def create(messages, model, tools=None, chat_id=None):
+    async def create(messages, model, tools=None, chat_id=None, tool_choice=None):
         used.append(model)
         return SimpleNamespace(finish_reason='stop', message=SimpleNamespace(content='ok', tool_calls=None))
 
@@ -153,7 +153,7 @@ def test_model_is_chosen_once_per_tool_loop(tmp_path, monkeypatch):
         SimpleNamespace(finish_reason='stop', message=SimpleNamespace(content='ok', tool_calls=None)),
     ])
 
-    async def create(messages, model, tools=None, chat_id=None):
+    async def create(messages, model, tools=None, chat_id=None, tool_choice=None):
         used.append(model)
         return next(responses)
 
@@ -221,7 +221,7 @@ def test_autoroute_command_toggles_and_warns_on_model(monkeypatch):
 def capture_last_roles(monkeypatch):
     roles = []
 
-    async def create(messages, model, tools=None, chat_id=None):
+    async def create(messages, model, tools=None, chat_id=None, tool_choice=None):
         roles.append(messages[-1]['role'])
         return SimpleNamespace(finish_reason='stop', message=SimpleNamespace(content='ok', tool_calls=None))
 
@@ -257,7 +257,7 @@ def test_requests_never_end_with_an_assistant_turn_after_a_tool_round_or_forced_
     tool_call = SimpleNamespace(id='a', function=SimpleNamespace(name='get_time', arguments='{}'))
     roles = []
 
-    async def create(messages, model, tools=None, chat_id=None):
+    async def create(messages, model, tools=None, chat_id=None, tool_choice=None):
         roles.append(messages[-1]['role'])
         return SimpleNamespace(finish_reason='tool_calls', message=SimpleNamespace(content=None, tool_calls=[tool_call]))
 

@@ -53,7 +53,7 @@ async def _run_turn(instance):
 		instance.add_tool_round(calls, reasoning_details)
 
 	logger.warning(f'Tool step limit ({max_tool_steps}) reached, forcing a final answer.')
-	return _finish(instance, await ChatCompletion.create(instance.get_context(), model, chat_id=instance.unique_id))
+	return _finish(instance, await ChatCompletion.create(instance.get_context(), model, tools, instance.unique_id, tool_choice='none'))
 
 # Maps an API failure (after the SDK's own retries) to a short message for the chat.
 def _error_message(error):

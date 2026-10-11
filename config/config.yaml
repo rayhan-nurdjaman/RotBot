@@ -1,4 +1,7 @@
 max_tool_steps: 8
+# History is trimmed in chunks so the cached prompt prefix survives between trims. The window grows to
+# context_length + (context_length * this fraction) messages, then is cut back to context_length.
+context_trim_fraction: 0.5
 # Shared by reasoning and the visible reply, so it must be generous or a thinking model can run out before answering.
 max_tokens: 16000
 # Per LLM request, in seconds. The openai SDK retries timeouts, 429s and 5xx up to llm_max_retries times with backoff.
