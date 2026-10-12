@@ -32,6 +32,7 @@ class Pending:
 		self.chat_id = chat_id
 		self.payload = payload		# whatever the creator needs to resume (assistant.Suspended)
 		self.message_id = None		# of the message with the buttons, set once it is sent
+		self.notified = False		# True once the chat was told that messages wait for this answer
 		self.timer = None
 
 _pending = {}
@@ -78,6 +79,10 @@ def peek(id):
 
 def count():
 	return len(_pending)
+
+# The requests of this chat that are still waiting for an answer, oldest first.
+def waiting(chat_id):
+	return [pending for pending in _pending.values() if pending.chat_id == chat_id]
 
 # Used at shutdown, so no timer outlives the program's event loop.
 def cancel_all():

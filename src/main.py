@@ -23,7 +23,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import access as Access
+import approvals as Approvals
 import client as Client
+import clock as Clock
 import assistant as Assistant
 import always_on as AlwaysOn
 from instance import Instance, personality_index
@@ -56,6 +58,78 @@ def _late_text(seconds):
 		return f'{hours} h {minutes} min'
 	return f'{hours // 24} days'
 
+# ---- Approvals (issue #43, docs/agent-parity.md section 5a)
+# A turn whose step contains a call that needs approval returns an Assistant.Suspended. The turn ends there, so the
+# chat's lock is free while the buttons are showing. A button press, or the expiry timer, resumes the turn.
+
+DENIED_REFUSAL = 'The user denied this request. Nothing was run. Do not run it again. Tell the user and ask what they want instead.'
+EXPIRED_REFUSAL = 'The user did not answer the approval request in time. Nothing was run. Do not run it again unless the user asks. Tell the user and ask what they want instead.'
+NOT_ASKED_REFUSAL = 'The user could not be asked for approval (the message could not be sent). Nothing was run. Tell the user and ask what they want instead.'
+WAITING_NOTICE = '_Waiting for an answer to the approval request above. Your message is saved and will be seen once it is answered._'
+
+# Sends the buttons for a suspended turn. True if the request is out and the turn now waits. If it could not be sent
+# nothing stays pending and False is returned, so the caller resumes the turn as refused: no tool call may run
+# without the user having been asked.
+async def _ask_for_approval(instance, suspended):
+	pending = Approvals.create(instance.unique_id, suspended, _approval_expired)
+	try:
+		pending.message_id = await Client.send_approval_request(instance.unique_id, Approvals.describe(suspended.calls), pending.id)
+	except Exception:
+		Approvals.take(pending.id)
+		logging.getLogger(__name__).exception(f'Could not send the approval request to chat {instance.unique_id}.')
+		return False
+	logging.getLogger(__name__).info(f'Approval request {pending.id} sent to chat {instance.unique_id}.')
+	return True
+
+# Called with the chat's lock held. Turns a get_response or resume result into text, or None if the turn is now
+# waiting for an approval (nothing to send; the buttons are the message).
+async def _settle(instance, result, raise_errors=False):
+	while isinstance(result, Assistant.Suspended):
+		if await _ask_for_approval(instance, result):
+			return None
+		result = await Assistant.resume(instance, result, refusal=NOT_ASKED_REFUSAL, raise_errors=raise_errors)
+	return result
+
+# Continues a turn after the answer. Closes the buttons first (so they stop being usable at once), then takes the
+# chat's lock like any other turn. `refusal` None means approved.
+async def _resume(pending, outcome, refusal):
+	instance = get_instance(pending.chat_id)
+	suspended = pending.payload
+	if pending.message_id is not None:
+		await Client.close_approval_request(pending.chat_id, pending.message_id, f'{Approvals.describe(suspended.calls)}\n\n{outcome}')
+	async with instance.lock:
+		async with Client.typing(instance):
+			result = await Assistant.resume(instance, suspended, refusal=refusal)
+			result = await _settle(instance, result)
+		if result is None:
+			return
+		try:
+			await Client.send_message(instance.unique_id, result)
+		except telegram.error.TelegramError:
+			logging.getLogger(__name__).exception(f'Could not send the reply to chat {instance.unique_id}.')
+
+async def _approval_expired(pending):
+	logging.getLogger(__name__).info(f'Approval request {pending.id} in chat {pending.chat_id} expired.')
+	await _resume(pending, 'Not answered in time. Nothing was run.', EXPIRED_REFUSAL)
+
+# A button press that passed the gate and was checked by the client. The request is taken first, so a second press
+# or the timer finds nothing.
+async def on_approval(chat_id, user, request_id, action):
+	pending = Approvals.take(request_id)
+	if pending is None or pending.chat_id != chat_id:
+		return
+	who = user.username or user.first_name or str(user.id)
+	logging.getLogger(__name__).info(f'Approval request {request_id} in chat {chat_id}: {action} by user {user.id}.')
+	if action == Approvals.DENY:
+		await _resume(pending, f'Denied by {who}. Nothing was run.', DENIED_REFUSAL)
+		return
+	if action == Approvals.DAY:
+		ends = Approvals.approve_day(chat_id)
+		outcome = f'Approved by {who}, and everything else in this chat until {ends:%Y-%m-%d %H:%M} {Clock.zone.key}.'
+	else:
+		outcome = f'Approved by {who}.'
+	await _resume(pending, outcome, None)
+
 # Called by the reminder scheduler. It runs a normal turn so the reminder is worded in the chat's persona, and
 # raises if the reminder did not reach the chat, which makes the scheduler retry it later. If only the LLM is
 # down the reminder is still sent, as plain text.
@@ -69,8 +143,13 @@ async def on_reminder(reminder, late_seconds=0):
 		# The lock is held from storing the message to the end of the turn (see issue #32).
 		async with instance.lock, Client.typing(instance):
 			response = await Assistant.get_response(instance, message=message, raise_errors=True)
+			response = await _settle(instance, response, raise_errors=True)
 	except (openai.APIError, Usage.CapReached):
 		logging.getLogger(__name__).exception(f'Could not word reminder {reminder["id"]} with the model, sending it as plain text.')
+		response = f'Reminder: {reminder["description"]}'
+	if response is None:
+		# The turn is waiting for an approval and may take long, or be lost in a restart: the reminder itself goes out now.
+		# The model's own wording may follow later, so it can appear twice.
 		response = f'Reminder: {reminder["description"]}'
 	await Client.send_message(instance.unique_id, response)
 
@@ -95,8 +174,20 @@ async def on_message(instance_id, text, images=None, no_response=False):
 		if not await AlwaysOn.should_respond(instance.get_context()):
 			return
 
+		# The step that is waiting for an answer will see this message once it resumes (it is already stored).
+		waiting = Approvals.waiting(instance.unique_id)
+		if waiting:
+			if not all(pending.notified for pending in waiting):
+				for pending in waiting:
+					pending.notified = True
+				await Client.send_message(instance.unique_id, WAITING_NOTICE)
+			return
+
 		async with Client.typing(instance):
 			response = await Assistant.get_response(instance)
+			response = await _settle(instance, response)
+		if response is None:
+			return
 		# The reply is already in the history, so a failed send is only logged (see issue #37).
 		try:
 			await Client.send_message(instance.unique_id, response)
@@ -208,6 +299,7 @@ async def main():
 	Client.list_memories_callback				= list_memories
 	Client.forget_memory_callback				= forget_memory
 	Client.show_usage_callback					= show_usage
+	Client.on_approval_callback					= on_approval
 
 	scheduler = None
 	try:
@@ -221,6 +313,7 @@ async def main():
 			scheduler.cancel()
 			with contextlib.suppress(asyncio.CancelledError):
 				await scheduler
+		Approvals.cancel_all()
 		await Client.shutdown()
 		await db.close()
 

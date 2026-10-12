@@ -207,3 +207,18 @@ def test_many_long_calls_still_fit_in_one_telegram_message():
 
 def test_a_short_command_is_not_marked_as_cut():
     assert 'cut for display' not in approvals.describe([('bash', {'command': 'pwd'})])
+
+
+def test_waiting_lists_only_the_requests_of_that_chat_oldest_first():
+    async def run():
+        first = approvals.create(5, None, never)
+        other = approvals.create(6, None, never)
+        second = approvals.create(5, None, never)
+        found = approvals.waiting(5), approvals.waiting(6), approvals.waiting(7)
+        approvals.cancel_all()
+        return first, other, second, found
+
+    first, other, second, (five, six, seven) = asyncio.run(run())
+
+    assert five == [first, second] and six == [other] and seven == []
+    assert first.notified is False
