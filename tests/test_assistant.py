@@ -302,3 +302,223 @@ def test_sdk_client_has_timeout_and_bounded_retries():
     from chat_completion import openai_client
     assert openai_client.max_retries == Assistant.config['llm_max_retries']
     assert openai_client.timeout == Assistant.config['llm_timeout_s']
+
+
+# ---- approval: a step with a call that needs it is suspended (issue #43)
+
+import access as Access
+import approvals as Approvals
+
+APPROVAL_CHAT = 'op-chat'
+
+
+@pytest.fixture
+def op_instance(monkeypatch):
+    monkeypatch.setattr(Access, '_op_chats', frozenset({APPROVAL_CHAT}))
+    monkeypatch.setattr(Approvals, '_day_approved', {})
+    return Instance(APPROVAL_CHAT)
+
+
+def bash_call(call_id='b1', command='ls'):
+    return tool_call(call_id, name='bash', arguments=json.dumps({'command': command, 'cwd': None, 'timeout_seconds': None, 'keep': None}))
+
+
+def run_tools(monkeypatch):
+    ran = []
+
+    async def tool_fn(name, arguments, ctx):
+        ran.append((name, arguments))
+        return {'tool': name}
+
+    monkeypatch.setattr(Assistant.registry, 'call', tool_fn)
+    return ran
+
+
+def test_a_step_with_bash_in_an_op_chat_is_suspended_and_nothing_runs(op_instance, monkeypatch):
+    ran = run_tools(monkeypatch)
+    llm = FakeLLM([tool_calls_response(bash_call(command='make test'))])
+    monkeypatch.setattr(Assistant.ChatCompletion, 'create', llm.create)
+    op_instance.add_user_message('run the tests')
+    before = list(op_instance.context_window)
+
+    result = asyncio.run(Assistant.get_response(op_instance))
+
+    assert isinstance(result, Assistant.Suspended)
+    assert result.calls == [('bash', {'command': 'make test', 'cwd': None, 'timeout_seconds': None, 'keep': None})]
+    assert ran == []
+    assert op_instance.context_window == before
+    assert len(llm.calls) == 1
+
+
+def test_approving_runs_every_call_of_the_step_and_the_turn_carries_on(op_instance, monkeypatch):
+    ran = run_tools(monkeypatch)
+    llm = FakeLLM([tool_calls_response(bash_call('a'), tool_call('b', name='list_reminders'), bash_call('c', command='pwd')), final_response('all done')])
+    monkeypatch.setattr(Assistant.ChatCompletion, 'create', llm.create)
+    op_instance.add_user_message('go')
+    suspended = asyncio.run(Assistant.get_response(op_instance))
+
+    result = asyncio.run(Assistant.resume(op_instance, suspended))
+
+    assert result == 'all done'
+    assert sorted(name for name, _ in ran) == ['bash', 'bash', 'list_reminders']
+    assert roles(op_instance) == ['user', 'assistant', 'tool', 'tool', 'tool', 'assistant']
+    assert [m['tool_call_id'] for m in op_instance.context_window[2:5]] == ['a', 'b', 'c']
+    assert len(llm.calls) == 2
+
+
+def test_denying_runs_nothing_and_tells_the_model_for_every_call(op_instance, monkeypatch):
+    ran = run_tools(monkeypatch)
+    llm = FakeLLM([tool_calls_response(bash_call('a'), tool_call('b', name='list_reminders')), final_response('ok, not running it')])
+    monkeypatch.setattr(Assistant.ChatCompletion, 'create', llm.create)
+    op_instance.add_user_message('go')
+    suspended = asyncio.run(Assistant.get_response(op_instance))
+
+    result = asyncio.run(Assistant.resume(op_instance, suspended, refusal='The user denied it.'))
+
+    assert result == 'ok, not running it'
+    assert ran == []
+    results = [json.loads(m['content']) for m in op_instance.context_window[2:4]]
+    assert results == [{'ok': False, 'error': 'The user denied it.'}] * 2
+    assert roles(op_instance) == ['user', 'assistant', 'tool', 'tool', 'assistant']
+    assert len(llm.calls) == 2
+
+
+def test_a_step_with_only_other_tools_is_not_suspended(op_instance, monkeypatch):
+    run_tools(monkeypatch)
+    llm = FakeLLM([tool_calls_response(tool_call('a', name='list_reminders')), final_response('fine')])
+    monkeypatch.setattr(Assistant.ChatCompletion, 'create', llm.create)
+
+    assert asyncio.run(Assistant.get_response(op_instance)) == 'fine'
+
+
+def test_a_chat_that_is_not_an_op_chat_is_not_suspended(monkeypatch):
+    monkeypatch.setattr(Access, '_op_chats', frozenset())
+    ran = run_tools(monkeypatch)
+    llm = FakeLLM([tool_calls_response(bash_call()), final_response('it said not enabled')])
+    monkeypatch.setattr(Assistant.ChatCompletion, 'create', llm.create)
+
+    assert asyncio.run(Assistant.get_response(Instance('elsewhere'))) == 'it said not enabled'
+    assert [name for name, _ in ran] == ['bash']
+
+
+def test_a_day_approval_lets_the_step_run_at_once_and_logs_it(op_instance, monkeypatch, caplog):
+    import logging
+    ran = run_tools(monkeypatch)
+    llm = FakeLLM([tool_calls_response(bash_call(command='df -h')), final_response('ran it')])
+    monkeypatch.setattr(Assistant.ChatCompletion, 'create', llm.create)
+    monkeypatch.setattr(Approvals, '_day_approved', {APPROVAL_CHAT: 4_000_000_000})
+
+    with caplog.at_level(logging.INFO):
+        result = asyncio.run(Assistant.get_response(op_instance))
+
+    assert result == 'ran it'
+    assert [name for name, _ in ran] == ['bash']
+    assert 'approved everything for the day' in caplog.text and 'df -h' in caplog.text
+
+
+def test_a_day_approval_of_another_chat_does_not_count(op_instance, monkeypatch):
+    run_tools(monkeypatch)
+    monkeypatch.setattr(Assistant.ChatCompletion, 'create', FakeLLM([tool_calls_response(bash_call())]).create)
+    monkeypatch.setattr(Approvals, '_day_approved', {'other-chat': 4_000_000_000})
+
+    assert isinstance(asyncio.run(Assistant.get_response(op_instance)), Assistant.Suspended)
+
+
+def test_the_model_and_the_reasoning_blocks_survive_the_wait(op_instance, monkeypatch):
+    from models import parse_model
+    run_tools(monkeypatch)
+    first = tool_calls_response(bash_call())
+    first.message.model_extra = {'reasoning_details': [{'type': 'reasoning.text', 'text': 'thinking'}]}
+    llm = FakeLLM([first, final_response('done')])
+    models = []
+    original = llm.create
+
+    async def create(messages, model, tools=None, chat_id=None, tool_choice=None):
+        models.append(model)
+        return await original(messages, model, tools, chat_id, tool_choice)
+
+    monkeypatch.setattr(Assistant.ChatCompletion, 'create', create)
+    op_instance.model = parse_model('sonnet-5.5-medium')
+    suspended = asyncio.run(Assistant.get_response(op_instance))
+    op_instance.model = parse_model('opus-5.5-max')   # changed while waiting
+
+    asyncio.run(Assistant.resume(op_instance, suspended))
+
+    assert models == [parse_model('sonnet-5.5-medium')] * 2
+    assert op_instance.context_window[0]['reasoning_details'] == [{'type': 'reasoning.text', 'text': 'thinking'}]
+
+
+def test_the_step_cap_counts_the_steps_before_the_wait(op_instance, monkeypatch):
+    run_tools(monkeypatch)
+    monkeypatch.setattr(Assistant, 'max_tool_steps', 3)
+    llm = FakeLLM([tool_calls_response(tool_call('a', name='list_reminders')), tool_calls_response(bash_call())], default=tool_calls_response(tool_call('x', name='list_reminders')))
+    original = llm.create
+
+    async def create(messages, model, tools=None, chat_id=None, tool_choice=None):
+        response = await original(messages, model, tools, chat_id, tool_choice)
+        return final_response('forced') if tool_choice == 'none' else response
+
+    monkeypatch.setattr(Assistant.ChatCompletion, 'create', create)
+    suspended = asyncio.run(Assistant.get_response(op_instance))
+    assert suspended.steps_left == 1
+
+    result = asyncio.run(Assistant.resume(op_instance, suspended))
+
+    assert result == 'forced'
+    assert len(llm.calls) == 4   # 2 before the wait, then 1 more step and the forced answer
+
+
+def test_a_resumed_step_can_ask_again(op_instance, monkeypatch):
+    run_tools(monkeypatch)
+    llm = FakeLLM([tool_calls_response(bash_call('a', 'first')), tool_calls_response(bash_call('b', 'second')), final_response('end')])
+    monkeypatch.setattr(Assistant.ChatCompletion, 'create', llm.create)
+    first = asyncio.run(Assistant.get_response(op_instance))
+
+    second = asyncio.run(Assistant.resume(op_instance, first))
+
+    assert isinstance(second, Assistant.Suspended)
+    assert second.calls[0][1]['command'] == 'second'
+    assert asyncio.run(Assistant.resume(op_instance, second)) == 'end'
+
+
+def test_messages_added_during_the_wait_stay_before_the_tool_round(op_instance, monkeypatch):
+    run_tools(monkeypatch)
+    monkeypatch.setattr(Assistant.ChatCompletion, 'create', FakeLLM([tool_calls_response(bash_call()), final_response('done')]).create)
+    op_instance.add_user_message('first request')
+    suspended = asyncio.run(Assistant.get_response(op_instance))
+    op_instance.add_user_message('something else meanwhile')
+
+    asyncio.run(Assistant.resume(op_instance, suspended))
+
+    assert roles(op_instance) == ['user', 'user', 'assistant', 'tool', 'assistant']
+
+
+def test_resume_on_a_chat_over_its_cap_runs_nothing(op_instance, monkeypatch):
+    ran = run_tools(monkeypatch)
+    monkeypatch.setattr(Assistant.ChatCompletion, 'create', FakeLLM([tool_calls_response(bash_call())]).create)
+    suspended = asyncio.run(Assistant.get_response(op_instance))
+
+    async def over_cap(chat_id):
+        raise Assistant.Usage.CapReached()
+
+    monkeypatch.setattr(Assistant.Usage, 'check', over_cap)
+
+    assert asyncio.run(Assistant.resume(op_instance, suspended)) == Assistant.CAP_MESSAGE
+    assert ran == []
+    with pytest.raises(Assistant.Usage.CapReached):
+        asyncio.run(Assistant.resume(op_instance, suspended, raise_errors=True))
+
+
+def test_an_api_error_after_resuming_gives_a_message_and_keeps_the_tool_round(op_instance, monkeypatch):
+    run_tools(monkeypatch)
+    llm = FakeLLM([tool_calls_response(bash_call())])
+    monkeypatch.setattr(Assistant.ChatCompletion, 'create', llm.create)
+    suspended = asyncio.run(Assistant.get_response(op_instance))
+
+    async def broken(messages, model, tools=None, chat_id=None, tool_choice=None):
+        raise openai.APIConnectionError(request=httpx.Request('POST', 'https://openrouter.ai/api/v1/chat/completions'))
+
+    monkeypatch.setattr(Assistant.ChatCompletion, 'create', broken)
+
+    assert asyncio.run(Assistant.resume(op_instance, suspended)) == Assistant.PROVIDER_MESSAGE
+    assert roles(op_instance) == ['assistant', 'tool']

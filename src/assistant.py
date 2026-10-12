@@ -7,6 +7,8 @@ import asyncio
 import openai
 from PIL import Image
 
+import access as Access
+import approvals as Approvals
 from config import config
 from tools.native import registry
 from tools.registry import ToolContext
@@ -31,6 +33,41 @@ CREDITS_MESSAGE = 'I\'m out of credits right now. Please let the bot owner know.
 REQUEST_MESSAGE = 'Something went wrong with that request. Please try again.'
 CAP_MESSAGE = 'This chat has reached its spending limit for today. It resets at midnight.'
 
+# What get_response returns instead of text when the model's step contains a call that needs the user's approval
+# (see approvals.py). Nothing of the step has run or been stored in the history. The caller asks the user and then
+# calls resume() with the answer. The model, the reasoning blocks and the number of steps left are kept so that the
+# turn carries on exactly where it stopped. It lives in memory only.
+class Suspended:
+	def __init__(self, tool_calls, reasoning_details, model, steps_left):
+		self.tool_calls = tool_calls
+		self.reasoning_details = reasoning_details
+		self.model = model
+		self.steps_left = steps_left
+
+	# [(tool name, arguments dict)] in the model's order, for showing to the user.
+	@property
+	def calls(self):
+		return [(tool_call.function.name, _arguments(tool_call)) for tool_call in self.tool_calls]
+
+def _arguments(tool_call):
+	try:
+		arguments = json.loads(tool_call.function.arguments)
+	except json.JSONDecodeError:
+		return {}
+	return arguments if isinstance(arguments, dict) else {}
+
+# True if this step must wait for the user: one of its calls needs approval, the chat is one where approval applies
+# (the op chats, the only ones where such tools run at all) and the user has not approved everything for the day.
+def _needs_approval(instance, tool_calls):
+	flagged = [tool_call for tool_call in tool_calls if registry.needs_approval(tool_call.function.name)]
+	if not flagged or not Access.is_op_chat(instance.unique_id):
+		return False
+	if Approvals.day_approved(instance.unique_id):
+		for tool_call in flagged:
+			logger.info(f'Running without asking, the chat approved everything for the day: chat {instance.unique_id}, {tool_call.function.name} {_arguments(tool_call)!r:.300}')
+		return False
+	return True
+
 # Public | Methods used in client.py
 # The caller must hold instance.lock, from before it stores the user message until this returns. One turn per chat
 # at a time, and nothing may be appended to the context in between, otherwise the request can end with an assistant
@@ -38,6 +75,7 @@ CAP_MESSAGE = 'This chat has reached its spending limit for today. It resets at 
 # message: text to store as a user message before the turn, e.g. an 'API: ...' event written by the caller.
 # raise_errors: let openai.APIError and usage.CapReached propagate instead of returning an error message, for callers
 # with a fallback.
+# Returns the reply text, or a Suspended (see above) when the turn has to wait for an approval.
 async def get_response(instance, message=None, raise_errors=False):
 	if message:
 		instance.add_user_message(message)
@@ -57,21 +95,55 @@ async def get_response(instance, message=None, raise_errors=False):
 		# Not stored in the context: the user's message stays, so they can simply retry.
 		return _error_message(e)
 
+# Carries on a turn that returned a Suspended, once the user has answered. The caller must hold instance.lock, like
+# for get_response. refusal=None means approved: every call of the step runs. Otherwise none of them runs and each
+# gets `refusal` (a sentence for the model) as its result, so a deny, an expiry and a failure to ask all look the
+# same to the loop. Returns what get_response returns. Between the suspension and now other turns may have added
+# messages to the history; the tool round is appended at the end, after them.
+async def resume(instance, suspended, refusal=None, raise_errors=False):
+	try:
+		await Usage.check(instance.unique_id)
+	except Usage.CapReached:
+		if raise_errors:
+			raise
+		return CAP_MESSAGE
+	try:
+		if refusal is None:
+			calls = await asyncio.gather(*[_process_tool_call(instance, tool_call) for tool_call in suspended.tool_calls])
+		else:
+			calls = [
+				(tool_call.id, tool_call.function.name, _arguments(tool_call), {'ok': False, 'error': refusal})
+				for tool_call in suspended.tool_calls
+			]
+		instance.add_tool_round(calls, suspended.reasoning_details)
+		return await _loop(instance, suspended.model, suspended.steps_left)
+	except openai.APIError as e:
+		if raise_errors:
+			raise
+		return _error_message(e)
+
 async def _run_turn(instance):
 	instance.drop_reasoning()
 	# Chosen once per turn so every step of a tool loop uses the same model.
 	model = await Router.route(instance) if instance.auto_route else instance.model
-	for _ in range(max_tool_steps):
+	return await _loop(instance, model, max_tool_steps)
+
+# `steps` tool rounds at most, then one forced answer without tools.
+async def _loop(instance, model, steps):
+	for step in range(steps):
 		response = await ChatCompletion.create(instance.get_context(), model, tools, instance.unique_id)
 		if response.finish_reason != 'tool_calls' or not response.message.tool_calls:
 			return _finish(instance, response)
 
 		logger.info(f'Tools called: {len(response.message.tool_calls)}')
-		calls = await asyncio.gather(*[_process_tool_call(instance, tool_call) for tool_call in response.message.tool_calls])
 		reasoning_details = (getattr(response.message, 'model_extra', None) or {}).get('reasoning_details')
+		if _needs_approval(instance, response.message.tool_calls):
+			logger.info(f'Waiting for approval in chat {instance.unique_id}.')
+			return Suspended(response.message.tool_calls, reasoning_details, model, steps - step - 1)
+		calls = await asyncio.gather(*[_process_tool_call(instance, tool_call) for tool_call in response.message.tool_calls])
 		instance.add_tool_round(calls, reasoning_details)
 
-	logger.warning(f'Tool step limit ({max_tool_steps}) reached, forcing a final answer.')
+	logger.warning('Tool step limit reached, forcing a final answer.')
 	return _finish(instance, await ChatCompletion.create(instance.get_context(), model, tools, instance.unique_id, tool_choice='none'))
 
 # Maps an API failure (after the SDK's own retries) to a short message for the chat.
