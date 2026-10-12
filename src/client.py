@@ -59,18 +59,43 @@ async def shutdown():
 	await application.stop()
 	await application.shutdown()
 
+# Telegram rejects a message over this many characters.
+MESSAGE_LIMIT = 4096
+
+# Cuts text into pieces of at most `limit` characters, preferring to cut at a blank line, then a newline, then a space.
+# Only whitespace at a cut is dropped, nothing else is lost.
+def split_message(text, limit=MESSAGE_LIMIT):
+	chunks = []
+	while len(text) > limit:
+		cut = max(text.rfind('\n\n', 0, limit), 0) or max(text.rfind('\n', 0, limit), 0) or max(text.rfind(' ', 0, limit), 0)
+		if cut:
+			chunk, text = text[:cut], text[cut:].lstrip()
+		else:
+			chunk, text = text[:limit], text[limit:]
+		chunks.append(chunk.rstrip() or chunk)
+	chunks.append(text)
+	return chunks
+
+# Long text is sent as several messages. Each is tried as Markdown first and as plain text if Telegram rejects
+# that (the reason is logged, see issue #37). An empty text is not sent: Telegram rejects it. A failure of the
+# plain-text send propagates, so a caller that needs delivery (reminders) can retry.
 async def send_message(chat_id, message, message_id=None):
-	try:
-		await application.bot.send_message(
-			chat_id=chat_id,
-			text=message,
-			parse_mode=telegram.constants.ParseMode.MARKDOWN
-		)
-	except:
-		await application.bot.send_message(
-			chat_id=chat_id,
-			text=message,
-		)
+	if not message or not message.strip():
+		logger.warning(f'Not sending an empty message to chat {chat_id}.')
+		return
+	for chunk in split_message(message):
+		try:
+			await application.bot.send_message(
+				chat_id=chat_id,
+				text=chunk,
+				parse_mode=telegram.constants.ParseMode.MARKDOWN
+			)
+		except telegram.error.TelegramError as e:
+			logger.warning(f'Telegram rejected a Markdown message for chat {chat_id} ({type(e).__name__}: {e}), sending it as plain text.')
+			await application.bot.send_message(
+				chat_id=chat_id,
+				text=chunk,
+			)
 
 async def send_client_message(chat_id, message, message_id=None):
 	await send_message(chat_id, f'_{message}_')

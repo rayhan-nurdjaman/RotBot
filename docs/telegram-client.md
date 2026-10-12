@@ -47,13 +47,15 @@ Photo size selection: always the **largest** size Telegram offers (`message.phot
 
 | Function | Behaviour |
 |---|---|
-| `send_message(chat_id, text)` | Sends with `parse_mode=MARKDOWN` (Telegram's **legacy** Markdown). On **any** exception it retries once as plain text. If that fails too, the exception propagates. |
+| `send_message(chat_id, text)` | Splits the text into pieces of at most 4096 characters (`split_message`: cuts at a blank line, else a newline, else a space, else hard-cuts). Each piece is sent with `parse_mode=MARKDOWN` (Telegram's **legacy** Markdown); if Telegram rejects it, the reason is logged as a WARNING and that piece is sent again as plain text. An empty or whitespace-only text is **not sent** (a WARNING is logged). If the plain-text send fails, the exception propagates. |
 | `send_client_message(chat_id, text)` | `send_message` with the text wrapped in `_..._` (italics). Unused now. |
 | `send_image`, `send_gif` | Thin wrappers over `send_photo` / `send_animation`. **Unused** (their tools were retired). |
 | `send_indicator(instance, indicator)` | Only `GENERATING_RESPONSE` does anything (sends the `typing` chat action). `REMINDER_CREATED` is accepted and ignored. |
 | `typing(instance)` | `async with` context manager: re-sends `typing` every 4 seconds while the body runs, cancels on exit or error, never raises (indicator errors are logged and ignored). Used around every turn. |
 
-Verified with a stand-in bot: plain text goes out in 1 attempt; text that Telegram's Markdown parser rejects (for example unbalanced `_`) is sent a second time as plain text; an **empty** message and a message **over 4096 characters** fail both attempts and raise `BadRequest` out of `send_message`. **There is no splitting of long replies and no handling of empty ones** (max reply is bounded in practice by `max_tokens`, 16000 tokens, which can exceed 4096 characters). A raise there propagates out of `main.on_message` into PTB's error handling (the reply is lost; the assistant message is already stored in the context).
+Covered by tests with a stand-in bot (`tests/test_client.py`): pieces never exceed 4096 characters and nothing but cut whitespace is lost; the cut preference order; a Markdown rejection is retried as plain text and the reason is logged; an empty text sends nothing. **Not verified against real Telegram.** If a piece fails after earlier pieces were sent, the earlier pieces stay sent; a caller that retries (the reminder scheduler) would send them again. `main.on_message` catches `TelegramError` from the send, logs it and carries on: the reply stays in the history (it was produced, only delivery failed). `main.on_reminder` does not catch it, so the scheduler retries (see [`reminders.md`](reminders.md)).
+
+The `400 Bad Request` seen on the first real run (2026-10-12) was a Markdown rejection that the plain-text retry fixed. Its cause was never logged at the time; the reply contained `rayhan_nurdjaman`, so an unbalanced `_` is the likely cause (*inferred*). The reason is now logged.
 
 The `message_id` parameter of the send functions is accepted and ignored: replies are **not** threaded to the user's message.
 

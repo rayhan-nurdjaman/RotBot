@@ -1,6 +1,7 @@
 import asyncio
 from types import SimpleNamespace
 
+import pytest
 import telegram
 
 import client as Client
@@ -90,3 +91,81 @@ def test_failed_photo_download_with_caption_falls_back_to_text():
     photo = [SimpleNamespace(file_id='a', width=100, height=100)]
     calls = run_on_message(make_update(caption='look', photo=photo), bot=FakeBot(fail=True))
     assert calls == [(42, 'alice: look', None, False)]
+
+
+class SendBot:
+    def __init__(self, reject_markdown=False, reject_all=False):
+        self.reject_markdown = reject_markdown
+        self.reject_all = reject_all
+        self.sent = []
+
+    async def send_message(self, chat_id, text, parse_mode=None):
+        if self.reject_all or (self.reject_markdown and parse_mode):
+            raise telegram.error.BadRequest("Can't parse entities")
+        assert 0 < len(text) <= 4096
+        self.sent.append((text, parse_mode))
+
+
+def run_send(text, bot, monkeypatch):
+    monkeypatch.setattr(Client, 'application', SimpleNamespace(bot=bot))
+    asyncio.run(Client.send_message(42, text))
+
+
+def test_split_message_keeps_short_text_whole():
+    assert Client.split_message('hello') == ['hello']
+
+
+def test_split_message_cuts_long_text_into_pieces_within_the_limit_and_loses_nothing():
+    text = '\n\n'.join(f'paragraph {i} ' + 'word ' * 150 for i in range(40))
+    assert len(text) > 10000
+
+    chunks = Client.split_message(text)
+
+    assert len(chunks) > 1
+    assert all(0 < len(chunk) <= 4096 for chunk in chunks)
+    assert ' '.join(' '.join(chunks).split()) == ' '.join(text.split())
+
+
+def test_split_message_prefers_a_blank_line_then_a_newline_then_a_space():
+    first = 'a' * 3000
+    second = 'b' * 3000
+    assert Client.split_message(f'{first}\n\n{second}') == [first, second]
+    assert Client.split_message(f'{first}\n{second}') == [first, second]
+    assert Client.split_message(f'{first} {second}') == [first, second]
+
+
+def test_split_message_hard_cuts_text_with_no_whitespace():
+    chunks = Client.split_message('x' * 9000)
+    assert [len(chunk) for chunk in chunks] == [4096, 4096, 808]
+    assert ''.join(chunks) == 'x' * 9000
+
+
+def test_send_message_sends_a_long_reply_as_several_messages(monkeypatch):
+    bot = SendBot()
+    text = '\n'.join('line ' * 40 for _ in range(100))
+
+    run_send(text, bot, monkeypatch)
+
+    assert len(bot.sent) > 1
+    assert all(parse_mode for _, parse_mode in bot.sent)
+
+
+@pytest.mark.parametrize('text', ['', '   \n '])
+def test_send_message_does_not_send_an_empty_reply(text, monkeypatch):
+    bot = SendBot()
+    run_send(text, bot, monkeypatch)
+    assert bot.sent == []
+
+
+def test_send_message_retries_as_plain_text_and_logs_the_reason(monkeypatch, caplog):
+    bot = SendBot(reject_markdown=True)
+
+    run_send('hi rayhan_nurdjaman', bot, monkeypatch)
+
+    assert bot.sent == [('hi rayhan_nurdjaman', None)]
+    assert "Can't parse entities" in caplog.text
+
+
+def test_send_message_raises_when_plain_text_fails_too(monkeypatch):
+    with pytest.raises(telegram.error.BadRequest):
+        run_send('hi', SendBot(reject_all=True), monkeypatch)

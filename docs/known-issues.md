@@ -28,9 +28,9 @@ Only users in `ALLOWED_USER_IDS` can use the bot (#35, [`access-control.md`](acc
 
 `web_search` and `web_fetch` run on OpenRouter (see [`tools.md`](tools.md)). Their calls and results are not in the assistant message we store, only the final cited reply. On a later turn the model sees a reply that cites sources but no tool call, and when asked "did you actually search?" it may answer that it did not, or that it cannot verify (reproduced live on Haiku, including after adding a prompt hint, which was removed because it had no effect). The earlier reply is still correct; only the model's account of how it got there is wrong. Also, a function-tool call after a server-tool call in the same turn does not see the search in the replayed history. Fix directions: store the `annotations` text in the assistant message, or accept it.
 
-### 4. Long or empty replies can fail to send
+### 4. Long or empty replies can fail to send (fixed, #37)
 
-`client.send_message` has no splitting. A reply over 4096 characters or an empty reply raises `telegram.error.BadRequest` after the plain-text retry (verified). The raise is not caught in `main.on_message`; the reply is lost and already stored in the context as if sent. `max_tokens` is 16000, so a long answer can exceed the limit. Empty replies are rare because `_finish` substitutes a fallback message for empty content.
+`client.send_message` now splits replies into pieces of at most 4096 characters, skips empty replies, logs why Telegram rejected a Markdown send, and `main.on_message` catches and logs a failed send. Tested with a stand-in bot, not against real Telegram. Remaining: a send that fails halfway through a long reply leaves the first pieces in the chat, and the reply is not retried for user messages (it is for reminders, which would resend the earlier pieces).
 
 ### 5. Users without usernames are indistinguishable (and one case crashes)
 
@@ -68,7 +68,6 @@ The speaker name in history is the Telegram `username`. It is `None` for users w
 | `message_id` parameters and the unused `message_id` local in `client.on_message` | `src/client.py` | Replies are not threaded. |
 | Commented-out token counting | `Instance.add_to_context`, `_set_personality` | Left from before. |
 | `global instances` | `main.get_instance` | Unneeded; pyflakes warns. |
-| Bare `except:` | `client.send_message` | Swallow everything, including cancellation. |
 | `README.md` TODO list | root | Owner's own notes; partly stale. |
 | `unused/` | repo | Retired features. `image_generation.py` still reads `OPENAI_API_KEY`. |
 

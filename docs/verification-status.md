@@ -48,14 +48,14 @@ What has been proven, and how. Use this to decide how much to trust a piece of b
 | Missing `TELEGRAM_API_KEY` fails at import; a wrong token fails at startup with `InvalidToken: Unauthorized` followed by a misleading `RuntimeError` | Run |
 | python-telegram-bot runs updates one at a time (`max_concurrent_updates = 1`) | Read at runtime from `client.application.update_processor` |
 | Command routing: first matching handler runs; unregistered commands and `@other_bot` commands fall through to the message handler | Real `telegram.Update` objects through `check_update` |
-| `send_message`: Markdown rejection retries as plain text; empty text and over-4096 text raise after the retry | Stand-in bot |
+| `send_message` (fixed, #37): Markdown rejection retries as plain text and logs the reason; empty text sends nothing; long text is split into pieces of at most 4096 characters | Stand-in bot, tests. Not real Telegram |
 | A new `Instance` runs as `base`, not `rotbot`; a failed `/schizo` resets the chat to base | Run |
 | The old `get_url_text` returned about 92,000 characters and 2,241 links for one Wikipedia page (tool since removed, see #16) | Run against live websites |
 | `client.on_message`: `None` usernames become `"None: "`, `from_user=None` and a reply to a sender-less message raise | Run with fake updates |
 
 ## Covered by tests (Test)
 
-246 tests, see [`contributing.md`](contributing.md). They prove the logic given fakes: grouping and ordering of tool rounds, the step cap, every finish reason branch, each error mapping, tool timeouts, malformed arguments, the lock, trimming never leaving an orphan, chunked trimming, request ordering and breakpoint placement, no `temperature`, the typing task lifecycle, reasoning kept and dropped, the memory store and its limits, the reminder scheduler (ordering, wake-up, retry, restart, cancel) and its tools, command behaviour, the `llm_call` fields.
+256 tests, see [`contributing.md`](contributing.md). They prove the logic given fakes: grouping and ordering of tool rounds, the step cap, every finish reason branch, each error mapping, tool timeouts, malformed arguments, the lock, trimming never leaving an orphan, chunked trimming, request ordering and breakpoint placement, no `temperature`, the typing task lifecycle, reasoning kept and dropped, the memory store and its limits, the reminder scheduler (ordering, wake-up, retry, restart, cancel) and its tools, command behaviour, the `llm_call` fields.
 
 **Tests cannot prove** that Telegram, OpenRouter or the provider cache behave as assumed. That is what the Live list is for.
 

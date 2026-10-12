@@ -12,6 +12,7 @@ logging.basicConfig(
 import asyncio
 import contextlib
 import openai
+import telegram.error
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -87,7 +88,11 @@ async def on_message(instance_id, text, images=None, no_response=False):
 
 	async with Client.typing(instance):
 		response = await Assistant.get_response(instance)
-	await Client.send_message(instance.unique_id, response)
+	# The reply is already in the history, so a failed send is only logged (see issue #37).
+	try:
+		await Client.send_message(instance.unique_id, response)
+	except telegram.error.TelegramError:
+		logging.getLogger(__name__).exception(f'Could not send the reply to chat {instance.unique_id}.')
 
 
 # Commands, should somehow make a pipeline for defining them, maybe decorators?

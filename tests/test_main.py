@@ -149,3 +149,21 @@ def test_a_personality_in_the_index_with_a_missing_file_changes_nothing(monkeypa
         instance.set_personality('ghost')
 
     assert snapshot(instance) == before
+
+
+def test_a_failed_send_is_logged_and_does_not_escape_on_message(monkeypatch, caplog):
+    import telegram.error
+
+    async def get_response(instance, message=None, raise_errors=False):
+        return 'the reply'
+
+    async def send_message(chat_id, message):
+        raise telegram.error.BadRequest('Message is too long')
+
+    monkeypatch.setattr(main.Assistant, 'get_response', get_response)
+    monkeypatch.setattr(main.Client, 'send_message', send_message)
+    monkeypatch.setattr(main, 'instances', {})
+
+    asyncio.run(main.on_message('chat-1', 'alice: hi'))
+
+    assert 'Could not send the reply to chat chat-1' in caplog.text
