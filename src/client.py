@@ -3,25 +3,22 @@ import logging
 import telegram
 import telegram.ext
 
-import io 
+import access as Access
+
+import io
 import os
 import asyncio
+import contextlib
 from enum import Enum
-
-import random # should move this to casino
-import sqlite3 # Legacy, for updating db. should move this to casino
-
-import casino as Casino
-from instance import Instance
 
 logger = logging.getLogger(__name__)
 
 class Indicator(Enum):
 	GENERATING_RESPONSE	= 0
-	SAVING_MEMORY		= 1
-	GENERATING_IMAGE	= 2
-	SEARCHING_THE_WEB	= 3
 	REMINDER_CREATED	= 4
+
+# Telegram clears a typing status after about 5 seconds, so it is re-sent a little sooner than that.
+TYPING_REFRESH_SECONDS = 4
 
 api_key = os.getenv('TELEGRAM_API_KEY')
 application = telegram.ext.Application.builder().token(api_key).build()
@@ -29,25 +26,26 @@ application = telegram.ext.Application.builder().token(api_key).build()
 on_message_callback					= None
 toggle_always_on_callback			= None
 set_instance_personality_callback	= None
+set_instance_model_callback			= None
+toggle_auto_route_callback			= None
+list_memories_callback				= None
+forget_memory_callback				= None
+show_help_callback					= None
 
 async def _handle_image(update, context):
-	image_max_res = 512
+	# Telegram lists the sizes of a photo from smallest to largest. Take the largest, assistant.encode_image caps it.
 	chosen_photo = update.message.photo[-1]
-	for photo_size in update.message.photo[-2::-1]:
-		width = photo_size.width
-		height = photo_size.height
-		min_res = min(width, height)
-		if min_res > image_max_res:
-			chosen_photo = photo_size
-		else:
-			break
 
-	file = await context.bot.get_file(chosen_photo.file_id)
+	try:
+		file = await context.bot.get_file(chosen_photo.file_id)
 
-	out_buffer = io.BytesIO()
-	await file.download_to_memory(out_buffer)
-	out_buffer.seek(0)
-	data = out_buffer.read()
+		out_buffer = io.BytesIO()
+		await file.download_to_memory(out_buffer)
+		out_buffer.seek(0)
+		data = out_buffer.read()
+	except telegram.error.TelegramError:
+		logger.exception('Failed to download photo.')
+		return None
 
 	return data
 
@@ -88,7 +86,31 @@ async def send_indicator(instance, indicator):
 		case Indicator.GENERATING_RESPONSE: # This hopefully will be deprecated once streaming is up
 			await application.bot.send_chat_action(chat_id=instance.unique_id, action=telegram.constants.ChatAction.TYPING)
 
+# Shows 'typing' for as long as the body runs (LLM calls and tool execution), and stops when it ends or fails.
+# Reasoning text is never sent to the chat, the typing status is all the user sees while the model thinks.
+@contextlib.asynccontextmanager
+async def typing(instance):
+	async def refresh():
+		while True:
+			try:
+				await send_indicator(instance, Indicator.GENERATING_RESPONSE)
+			except telegram.error.TelegramError:
+				logger.warning('Failed to send typing indicator.', exc_info=True)
+			await asyncio.sleep(TYPING_REFRESH_SECONDS)
+
+	task = asyncio.create_task(refresh())
+	try:
+		yield
+	finally:
+		task.cancel()
+		with contextlib.suppress(asyncio.CancelledError):
+			await task
+
 async def on_message(update, context):
+	# Ignore updates without a message (edits, channel posts, etc.)
+	if update.message is None:
+		return
+
 	chat_id			= update.message.chat.id
 	message_id		= update.message.message_id
 	username		= update.message.from_user.username
@@ -111,132 +133,61 @@ async def on_message(update, context):
 		user_message = f'{update.message.caption}'
 
 	# Don't continue if user provides nothing. Ideally this shouldn't even be here. Change with Update filters.
-	if not (user_message or photo_url):
+	if not (user_message or update.message.photo):
 		return
 
 	message = f'{username}: ' + reply_prefix + user_message
 	images = await _handle_image(update, context) if update.message.photo else None
+	if not (user_message or images):
+		return
 
 	await on_message_callback(chat_id, message, images, no_response=False)
 
 # Commands
-async def sql(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
-	command = " ".join(context.args)
-	ops = [op.strip() for op in os.getenv('OPS', '').split(',') if op.strip()]
-	user = update.message.from_user.username
-	if user in ops:
-		with sqlite3.connect("data/database.db") as con:
-			cur = con.cursor()
-			cur.execute(command)
-			con.commit()
-
-async def aura(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
-	aura = Casino.get_balance(update.message.from_user.id)
-	caller = update.message.from_user.username
-	chat_id = update.message.chat.id
-
-	message = f'API: {caller} used the \'Aura\' command. Their Aura balance currently has {aura} Aura.'
-
-	await on_message_callback(chat_id, message, images=[], no_response=True)
-	await send_client_message(chat_id, f'You currently have {aura} Aura.')
-
-async def penis(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
-	caller = update.message.from_user.username
-	chat_id = update.message.chat.id
-	value = random.randint(0, 12)
-	aura_gain = value * 50
-
-	Casino.modify_balance(update.message.from_user.id, aura_gain)
-
-	message = f'API: {caller} used the \'Penis\' command. They have gained {aura_gain} Aura.'
-	await on_message_callback(chat_id, message, images=[], no_response=True)
-
-	await send_client_message(chat_id, f'8{'='*value}D')
-
 async def schizo(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
-	try:
-		await set_instance_personality_callback(update.message.chat.id, context.args[0].lower())
-	except IndexError:
-		await send_client_message(chat_id, 'Usage: /schizo <personality>')
-
-async def coinflip(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
-	chat_id = update.message.chat.id
-	outcomes = ['heads', 'tails']
-	try:
-		guess = context.args[0].lower()
-		if guess not in outcomes:
-			raise ValueError
-		wager = int(context.args[1])
-	except (ValueError, IndexError):
-		await send_client_message(chat_id, 'Usage: /coinflip <heads/tails> <amount>')
-	else:
-		caller = update.message.from_user.username
-		user_id = update.message.from_user.id
-		if wager <= Casino.get_balance(user_id):
-			outcome = random.choice(outcomes)
-			message = ''
-			if guess == outcome:
-				# Won
-				Casino.modify_balance(user_id, wager)
-				message = f'API: {caller} flipped a coin, wagering {wager} Aura on {guess}. The outcome was {outcome} and they won.'
-				await send_client_message(chat_id, f'Good guess! You won {wager} Aura.')
-			else:
-				# Lost
-				Casino.modify_balance(user_id, -wager)
-				message = f'API: {caller} flipped a coin, wagering {wager} Aura on {guess}. The outcome was {outcome} and they lost.'
-				await send_client_message(chat_id, f'Tough luck! You lost {wager} Aura.')
-			await on_message_callback(update.message.chat.id, message, images=[], no_response=True)
-		else:
-			# Not enough
-			await send_client_message(chat_id, f'Not enough Aura!')
-
-async def leaderboard(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
-	caller = update.message.from_user.username
-	chat_id = update.message.chat.id
-	leaderboard_string = ""
-
-	rank = 1
-	for user_id, aura in Casino.get_top(5):
-		chat_member = await context.bot.get_chat_member(chat_id=chat_id, user_id=user_id)
-		username = chat_member.user.username
-		leaderboard_string += f"{rank}. {username}: {aura} Aura\n"
-		rank += 1
-
-	if leaderboard_string:
-		message = f'API: {caller} used the \'Aura Leaderboard\' command. The current Aura leaderboard is as follows:\n{leaderboard_string}'
-		await send_client_message(chat_id, leaderboard_string)
-		await on_message_callback(chat_id, message, images=[], no_response=True)
-	else:
-		message = f'API: {caller} used the \'Aura Leaderboard\' command. There is currently nobody in the leaderboard.'
-		await send_client_message(chat_id, f'No data available for the leaderboard.')
-		await on_message_callback(chat_id, message, images=[], no_response=True)
-
-async def roll_for_humor(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
-	chat_id = update.message.chat.id
-	caller = update.message.from_user.username
-
-	rolled = random.randint(1, 6)
-	aura = rolled * 100
-	Casino.modify_balance(update.message.from_user.id, aura)
-
-	await context.bot.send_video_note(chat_id=chat_id, video_note=open(f'dicerolls/{rolled}.mp4', 'rb'))
-
-	message = '💀'*rolled
-	
-	await send_client_message(chat_id, message)
-	await on_message_callback(chat_id, f'API: {caller} used the \'Roll Humor\' command. They have gained {aura} Aura.', images=[], no_response=True)
+	await set_instance_personality_callback(update.message.chat.id, context.args[0].lower() if context.args else '')
 
 async def toggle_always_on(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
 	await toggle_always_on_callback(update.message.chat.id)
 
-application.add_handler(telegram.ext.CommandHandler('rollhumor', roll_for_humor))
-application.add_handler(telegram.ext.CommandHandler('penis', penis))
+async def model(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
+	await set_instance_model_callback(update.message.chat.id, ' '.join(context.args))
+
+async def autoroute(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
+	await toggle_auto_route_callback(update.message.chat.id)
+
+async def memory(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
+	await list_memories_callback(update.message.chat.id)
+
+async def forget(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
+	await forget_memory_callback(update.message.chat.id, ' '.join(context.args))
+
+async def help(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
+	await show_help_callback(update.message.chat.id)
+
+# Runs before every other handler (group -1). Anyone who is not on the allow-list is dropped here: no reply, and
+# nothing reaches the conversation. The log line has ids only, never the message text. An update with no sender
+# (a channel post, an anonymous group admin) is dropped too. If this function itself failed, PTB would carry on
+# to the other handlers, so it must not raise anything but ApplicationHandlerStop.
+async def gate(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
+	user = update.effective_user
+	if user is not None and Access.is_allowed(user.id):
+		return
+	chat = update.effective_chat
+	logger.warning(f'Dropped an update from a user who is not allowed: user id {user.id if user else None}, chat id {chat.id if chat else None}.')
+	raise telegram.ext.ApplicationHandlerStop
+
+# TODO(/usage): not implemented yet, see https://github.com/rayhan-nurdjaman/RotBot/issues/31
+# Any member of a chat can run it, and it shows only that chat's own usage and spend.
+
+application.add_handler(telegram.ext.TypeHandler(telegram.Update, gate), group=-1)
+application.add_handler(telegram.ext.CommandHandler('help', help))
 application.add_handler(telegram.ext.CommandHandler('stfu', toggle_always_on))
-application.add_handler(telegram.ext.CommandHandler('coinflip', coinflip))
-application.add_handler(telegram.ext.CommandHandler('aura', aura))
-application.add_handler(telegram.ext.CommandHandler('leaderboard', leaderboard))
+application.add_handler(telegram.ext.CommandHandler('model', model))
+application.add_handler(telegram.ext.CommandHandler('autoroute', autoroute))
 application.add_handler(telegram.ext.CommandHandler('schizo', schizo))
-application.add_handler(telegram.ext.CommandHandler('sql', sql))
+application.add_handler(telegram.ext.CommandHandler('memory', memory))
+application.add_handler(telegram.ext.CommandHandler('forget', forget))
 application.add_handler(telegram.ext.MessageHandler(telegram.ext.filters.ALL, on_message))
 
 logger.info('Client object initialized.')
