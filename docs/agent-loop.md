@@ -16,7 +16,7 @@ get_response(instance, message=None, raise_errors=False):   # the CALLER holds i
 
 _run_turn(instance):
     instance.drop_reasoning()                         # reasoning blocks never cross turns
-    model = router.route(instance) if instance.auto_route else instance.model   # once per turn
+    model = await router.route(instance) if instance.auto_route else instance.model   # once per turn
     repeat max_tool_steps times:                      # 8
         response = chat_completion.create(instance.get_context(), model, tools, chat_id)
         if response.finish_reason != "tool_calls" or no tool_calls on the message:

@@ -7,6 +7,8 @@ max_tokens: 16000
 # Per LLM request, in seconds. The openai SDK retries timeouts, 429s and 5xx up to llm_max_retries times with backoff.
 llm_timeout_s: 180
 llm_max_retries: 2
+# Per auto-routing call to Jev, in seconds (src/router.py). On timeout or any other failure the cheapest model is used.
+jev_timeout_s: 5
 # Per tool call, in seconds. A timed-out tool returns an error to the model so it can recover.
 tool_timeout_s: 30
 # IANA timezone used to show the current time to the model and to read reminder times that have no UTC offset.

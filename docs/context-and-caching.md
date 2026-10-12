@@ -126,7 +126,7 @@ The base system prompt plus the tool list is about 1900 tokens, comfortably abov
 |---|---|
 | `/schizo <name>` | System prompt changes, whole prefix is new. Intentional. |
 | A trim (every few messages, see above) | One request with a new front. Expected. |
-| Model change (`/model`, auto-route) | Caches are per model; first request on the new model is a write. |
+| Model change (`/model`, auto-route) | Caches are per model; first request on a model that has not seen the prefix is a write. Measured: going back to a model used earlier reads its old cache, so flipping does not evict (details, limits and what is untested in [`auto-routing.md`](auto-routing.md)). |
 | Adding a tool or editing a personality while the bot runs | Only affects new `Instance`s and a restart. |
 | Putting per-request data (time, memory, usernames) into the system prompt | **Breaks caching on every request.** Stamp it into the stored user message instead. |
 | **Adding anything after the last history message** (a trailing message or part) while a server tool is in the list | **Disables caching entirely (0 reads), silently.** See [`caching-and-server-tools.md`](caching-and-server-tools.md). |

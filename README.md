@@ -33,7 +33,7 @@ Every message the bot can see in a chat, including group messages and photos, is
 - Figure out any good search tool providers/mcp/whatnot
 - make a calendar tool etc and avoid the current poll pattern in use
 - disable always on, it is not applicable anymore
-  - if not: replace the current model with jev via open router
+  - if not: ~~replace the current model with jev via open router~~ (done for model routing, see docs/auto-routing.md; the always-on decision itself is still a stub)
   - as fallback, always reply 5 mins (stored in a variable) after the last message has been sent to support multiple texts. consider vector style time increments (30 sec -> 1 min -> 2 min) for every consecutive message, though realistically assumptions dont justify that method
 - current architecture is bad, need to change everything
 - when changing personalities, consider compacting previous prompts and starting fresh with only the system prompt and the compacted context to avoid accidentally few shot prompting the model

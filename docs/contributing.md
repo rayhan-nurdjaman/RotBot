@@ -27,7 +27,7 @@ Logs go to stdout and `app.log`. Stop with Ctrl-C. A bot token must exist (creat
 ## Tests
 
 ```sh
-env/bin/python -m pytest -q               # 278 tests, about 2 seconds, no network
+env/bin/python -m pytest -q               # 293 tests, about 2 seconds, no network
 env/bin/python -m pyflakes src tests      # expect exactly 2 pre-existing warnings in src/
 ```
 
@@ -40,6 +40,7 @@ Layout (`tests/`):
 | `test_instance.py` | Trimming: no orphaned tool messages, chunked trimming |
 | `test_cache.py` | Request ordering, breakpoint placement, tool list stability, `session_id`, `tool_choice` |
 | `test_models.py` | `parse_model`, the request body, `/model`, `/autoroute`, routing, "request never ends with an assistant message" |
+| `test_router.py` | The Jev router: request shape, state rules, every failure falling back, the `jev_call` line (HTTP is faked with `httpx.MockTransport`) |
 | `test_typing_and_reasoning.py` | Typing task lifecycle, reasoning kept within a loop and dropped between turns |
 | `test_logging.py` | The `llm_call` line, image-only message logging, redaction of the bot token from log lines and tracebacks |
 | `test_registry.py` | Registry: schema generation, strict mode, validation, result shape, prompt section |

@@ -60,7 +60,7 @@ async def get_response(instance, message=None, raise_errors=False):
 async def _run_turn(instance):
 	instance.drop_reasoning()
 	# Chosen once per turn so every step of a tool loop uses the same model.
-	model = Router.route(instance) if instance.auto_route else instance.model
+	model = await Router.route(instance) if instance.auto_route else instance.model
 	for _ in range(max_tool_steps):
 		response = await ChatCompletion.create(instance.get_context(), model, tools, instance.unique_id)
 		if response.finish_reason != 'tool_calls' or not response.message.tool_calls:

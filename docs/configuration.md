@@ -27,6 +27,7 @@ Loaded into the dict `config.config` by `src/config.py` when first imported. Eve
 | `context_trim_fraction` | 0.5 | The history may grow by `int(context_length * this)` messages (minimum 1) past `context_length` before it is cut back. Lower means more frequent trims, so more cache misses. |
 | `max_tokens` | 16000 | Output limit per LLM call, **shared by reasoning and the visible reply**. |
 | `llm_timeout_s` | 180 | HTTP timeout per LLM request attempt. |
+| `jev_timeout_s` | 5 | HTTP timeout for the auto-routing call to Jev (`router.py`). On timeout the cheapest model is used. See [`auto-routing.md`](auto-routing.md). |
 | `llm_max_retries` | 2 | SDK retries for timeouts, connection errors, 408, 409, 429, 5xx (exponential backoff). |
 | `tool_timeout_s` | 30 | Per tool call. A timed-out tool returns an error to the model. |
 | `daily_cap_usd` | 1.00 | The most one chat may spend per calendar day (in `timezone`), in USD. Checked at the start of a turn, so one turn can overshoot. See [`usage-and-cap.md`](usage-and-cap.md). |

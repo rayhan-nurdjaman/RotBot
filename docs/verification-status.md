@@ -36,6 +36,8 @@ What has been proven, and how. Use this to decide how much to trust a piece of b
 | An invalid model slug returns HTTP 400 and the user gets `REQUEST_MESSAGE` with their message kept | Real request |
 | `max_tokens` too small on Sonnet at max effort gives `finish_reason: length` with empty content, mapped to `LENGTH_MESSAGE` | Real request with `max_tokens=40` |
 | One `llm_call` log line is produced per call with real values | Real request |
+| Auto routing (Jev): `router.route` on six hand-written conversations chose Haiku for chit-chat, a reminder and a follow-up, and Sonnet for a whiteboard question, a debugging request and a planning request; each call cost about $0.00002 and took 0.5 to 1.3 s. Telegram was not involved. Details and probabilities in [`auto-routing.md`](auto-routing.md) | Real Jev calls, about $0.0001 |
+| Switching models does not evict the prompt cache: a 9-request sequence over Haiku and Sonnet (and two efforts) wrote the cache once per model and read it on every later request, including after switching back. **Without tools or server tools**; the real request shape is untested | Real requests, about $0.05, see [`auto-routing.md`](auto-routing.md) |
 | Usage rows and the daily cap (#14, #31): with the cap set to $0.0005, a real Haiku turn answered and stored one row with OpenRouter's reported cost ($0.00074), the next turn returned the cap notice with no request, another chat's total stayed 0. Telegram was not involved | One script, temp database, about 0.1 cent |
 | `session_id`, `user`, `parallel_tool_calls`, `max_tokens` are accepted | Every request |
 | The cache is lost by a trailing message only when `web_search` has `engine: exa`; other parameters of `web_search`, `web_fetch` and function tools are fine; Haiku and Sonnet behave alike (Opus not tested) | 15 three-turn scenarios, full table in [`caching-and-server-tools.md`](caching-and-server-tools.md), about 20 cents |
@@ -59,7 +61,7 @@ What has been proven, and how. Use this to decide how much to trust a piece of b
 
 ## Covered by tests (Test)
 
-278 tests, see [`contributing.md`](contributing.md). They prove the logic given fakes: grouping and ordering of tool rounds, the step cap, every finish reason branch, each error mapping, tool timeouts, malformed arguments, the lock, trimming never leaving an orphan, chunked trimming, request ordering and breakpoint placement, no `temperature`, the typing task lifecycle, reasoning kept and dropped, the memory store and its limits, the reminder scheduler (ordering, wake-up, retry, restart, cancel) and its tools, command behaviour, the `llm_call` fields.
+293 tests, see [`contributing.md`](contributing.md). They prove the logic given fakes: grouping and ordering of tool rounds, the step cap, every finish reason branch, each error mapping, tool timeouts, malformed arguments, the lock, trimming never leaving an orphan, chunked trimming, request ordering and breakpoint placement, no `temperature`, the typing task lifecycle, reasoning kept and dropped, the memory store and its limits, the reminder scheduler (ordering, wake-up, retry, restart, cancel) and its tools, command behaviour, the `llm_call` fields.
 
 **Tests cannot prove** that Telegram, OpenRouter or the provider cache behave as assumed. That is what the Live list is for.
 

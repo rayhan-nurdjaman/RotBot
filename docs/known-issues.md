@@ -34,6 +34,7 @@ The speaker name in history is the Telegram `username`. It is `None` for users w
 
 ## Surprises (behave as written, but not what you would assume)
 
+- **Auto routing quietly falls back to Haiku when Jev fails**, and its cost is not in `/usage` or the daily cap. Whether flipping models costs extra cache writes with the real request shape (tools, memory, trims, images) is only partly measured: issue #55, [`auto-routing.md`](auto-routing.md).
 - **Commands not registered are answered as chat text.** `/aura` (removed) or `/stfu@another_bot` goes to the model. See [`telegram-client.md`](telegram-client.md).
 - **One timezone for every chat.** `timezone` in `config/config.yaml` (default `Asia/Singapore`) is used for the message timestamps and for reminder times that have no UTC offset. There is no per-chat timezone.
 - **`/stfu` messages enter the context** as `API:` user messages and the model sees them. They are `user` messages, so a long run of them is still valid for the API.

@@ -45,11 +45,11 @@ A `ModelSpec` is `(name, effort)`. It prints as `name-effort` (`haiku-5.5-high`)
 
 Anyone in a chat can run these (no admin check). The setting lasts until restart. See [`telegram-client.md`](telegram-client.md).
 
-Precedence for a turn (`assistant._run_turn`): `if instance.auto_route: router.route(instance) else: instance.model`. Chosen **once per turn**.
+Precedence for a turn (`assistant._run_turn`): `if instance.auto_route: await router.route(instance) else: instance.model`. Chosen **once per turn**.
 
 ### The router (`src/router.py`)
 
-`route(instance) -> ModelSpec` is a **stub**: a `match` with one case that returns `DEFAULT_MODEL`. The owner plans to replace the body with a classifier that reads the conversation and picks the model. Contract for whoever does that: keep the signature (it receives the whole `Instance`), return a `ModelSpec`, do not mutate the instance, and expect it to be called once per turn **while holding the chat's lock** (a slow router delays that chat). No rules for images or long input exist.
+`async route(instance) -> ModelSpec` asks Jev (a decision model on OpenRouter, called with `httpx` on `/api/v1/systemone`) to choose between `haiku-5.5-low` and `sonnet-5.5-medium`, using the last few messages as text. If anything goes wrong it returns `DEFAULT_MODEL` and logs a warning. Contract: it receives the whole `Instance`, returns a `ModelSpec`, never raises, does not mutate the instance, and is awaited once per turn **while holding the chat's lock** (a slow router delays that chat; the timeout is `jev_timeout_s`). Everything about it, including what is sent to Jev, how it fails, its cost, and how switching models affects the prompt cache, is in [`auto-routing.md`](auto-routing.md).
 
 `/model` is open to the same chats whose auto-route is off; there is no per-user permission model anywhere.
 

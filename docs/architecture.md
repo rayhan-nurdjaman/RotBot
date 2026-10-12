@@ -13,7 +13,7 @@ All code is in `src/`. Modules import each other by bare name (`import client as
 | `src/chat_completion.py` | The only module that talks to OpenRouter. Builds the request, logs one `llm_call` line per call. | `config` |
 | `src/instance.py` | The `Instance` class: conversation storage, trimming, request assembly, personality loading, a per-turn copy of the chat's memory. | `config`, `models` |
 | `src/models.py` | The model catalogue (pinned slugs), effort levels, `ModelSpec`, `parse_model`. | none |
-| `src/router.py` | `route(instance)`: stub that picks a model spec when auto routing is on. | `models` |
+| `src/router.py` | `async route(instance)`: asks Jev (OpenRouter's decision model) to choose between Haiku and Sonnet when auto routing is on; falls back to the cheapest model. See [`auto-routing.md`](auto-routing.md). | `models`, `config`, `httpx` |
 | `src/always_on.py` | `should_respond(context)`: stub that always returns `True`. | none |
 | `src/tools/registry.py` | The tool registry: `@tool` decorator, schema generation, Pydantic argument validation, the standard result shape, `ToolContext`, `ToolError`. | `pydantic` |
 | `src/tools/native.py` | The built-in tools (`save_memory`, `recall_memory`, `forget_memory`, `set_reminder`, `list_reminders`, `cancel_reminder`) and the declaration of the OpenRouter server tools `web_search` and `web_fetch`. Importing it registers them. | `registry`, `reminders`, `clock` |
@@ -137,7 +137,7 @@ The reminder path is the same from step 2: the scheduler calls `main.on_reminder
 | To change | Edit | Read |
 |---|---|---|
 | Add or change a tool | a `@tool` function in `src/tools/native.py` (schema, dispatch and prompt text are generated) | [`tools.md`](tools.md) |
-| Change how the model is chosen per turn | `src/router.py` (keep the signature) | [`models-and-openrouter.md`](models-and-openrouter.md) |
+| Change how the model is chosen per turn | `src/router.py` (keep the signature) | [`auto-routing.md`](auto-routing.md) |
 | Change when the bot replies | `src/always_on.py` | `main.on_message` |
 | Add a personality | a YAML in `config/personality/` plus an entry in `index.yaml` | [`configuration.md`](configuration.md) |
 | Add a slash command | a handler in `client.py`, a callback variable, a function in `main.py`, assign it in `main.main()` | [`telegram-client.md`](telegram-client.md) |

@@ -120,7 +120,10 @@ def run_turn(instance, monkeypatch):
 def test_turn_uses_the_chat_model_when_auto_route_is_off(tmp_path, monkeypatch):
     instance = make_instance(tmp_path, monkeypatch)
     instance.model = parse_model('opus-5.5-max')
-    monkeypatch.setattr(router, 'route', lambda i: pytest.fail('router must not be used'))
+    async def route(i):
+        pytest.fail('router must not be used')
+
+    monkeypatch.setattr(router, 'route', route)
 
     assert run_turn(instance, monkeypatch) == [parse_model('opus-5.5-max')]
 
@@ -129,20 +132,24 @@ def test_auto_route_overrides_the_chat_model(tmp_path, monkeypatch):
     instance = make_instance(tmp_path, monkeypatch)
     instance.model = parse_model('opus-5.5-max')
     instance.auto_route = True
-    monkeypatch.setattr(router, 'route', lambda i: parse_model('sonnet-5.5-medium'))
+
+    async def route(i):
+        return parse_model('sonnet-5.5-medium')
+
+    monkeypatch.setattr(router, 'route', route)
 
     assert run_turn(instance, monkeypatch) == [parse_model('sonnet-5.5-medium')]
-
-
-def test_stub_router_returns_the_cheapest_model(tmp_path, monkeypatch):
-    assert router.route(make_instance(tmp_path, monkeypatch)) == DEFAULT_MODEL
 
 
 def test_model_is_chosen_once_per_tool_loop(tmp_path, monkeypatch):
     instance = make_instance(tmp_path, monkeypatch)
     instance.auto_route = True
     picks = iter([parse_model('haiku-5.5-low'), parse_model('opus-5.5-max')])
-    monkeypatch.setattr(router, 'route', lambda i: next(picks))
+
+    async def route(i):
+        return next(picks)
+
+    monkeypatch.setattr(router, 'route', route)
     used = []
     tool_call = SimpleNamespace(id='a', function=SimpleNamespace(name='get_time', arguments='{}'))
     responses = iter([
