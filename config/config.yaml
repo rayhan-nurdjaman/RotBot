@@ -15,6 +15,8 @@ tool_timeout_s: 30
 # The longest a bash command may be asked to run, in seconds (the default is 20). The whole bot handles one update at a
 # time, so while a command runs no other chat is answered: keep this low.
 bash_max_timeout_s: 120
+# How long a bash approval request waits for a button press, in seconds (src/approvals.py). After that it counts as denied.
+approval_timeout_s: 60
 # The folder file and shell tools are meant to stay inside (bash's `cwd` argument must be in it). `~` is the home folder
 # of the user running the bot. Quoted on purpose: an unquoted ~ is read by YAML as null. A guard against mistakes and
 # prompt injection, not a sandbox: bash can still run `cd` and `cat` on anything the user can.
