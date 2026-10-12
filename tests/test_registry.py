@@ -232,3 +232,43 @@ def test_tool_accepts_a_timeout_and_reports_it(registry):
     assert registry.timeout('quick') is None
     assert registry.timeout('nope') is None
     assert [s['function']['name'] for s in registry.schemas()] == ['slow', 'quick']
+
+
+def test_tool_can_be_marked_as_needing_approval(registry):
+    @registry.tool(approval=True)
+    async def risky(ctx):
+        """Doc."""
+        return {}
+
+    @registry.tool(timeout=5, approval=True)
+    async def risky_and_slow(ctx):
+        """Doc."""
+        return {}
+
+    @registry.tool
+    async def safe(ctx):
+        """Doc."""
+        return {}
+
+    assert registry.needs_approval('risky') is True
+    assert registry.needs_approval('risky_and_slow') is True
+    assert registry.timeout('risky_and_slow') == 5
+    assert registry.needs_approval('safe') is False
+    assert registry.needs_approval('nope') is False
+
+
+def test_only_bash_needs_approval_and_the_tool_list_is_unchanged():
+    from tools.native import registry as native_registry
+
+    names = [s['function']['name'] for s in native_registry.schemas() if s['type'] == 'function']
+
+    assert [n for n in names if native_registry.needs_approval(n)] == ['bash']
+    assert names == ['save_memory', 'recall_memory', 'forget_memory', 'set_reminder', 'list_reminders', 'cancel_reminder', 'bash']
+
+
+def test_bash_description_tells_the_model_it_may_be_denied():
+    from tools.native import registry as native_registry
+
+    description = next(s['function']['description'] for s in native_registry.schemas() if s['type'] == 'function' and s['function']['name'] == 'bash')
+
+    assert 'approve' in description and 'denied' in description and 'no sandbox' in description

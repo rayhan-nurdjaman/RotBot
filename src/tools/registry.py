@@ -38,9 +38,11 @@ class Registry:
 	# model as {'ok': True, ...}. Raise ToolError for expected failures.
 	# Use as @tool, or as @tool(timeout=seconds) for a tool that may run longer than the loop's default limit
 	# (config tool_timeout_s). It must then stop itself sooner, so that it reports the stop instead of being cut off.
-	def tool(self, fn=None, *, timeout=None):
+	# @tool(approval=True) marks a tool that can run code or change things: in a chat where approval applies, the
+	# agent loop asks the user before any call of the step runs (see approvals.py). The registry only records the flag.
+	def tool(self, fn=None, *, timeout=None, approval=False):
 		if fn is None:
-			return lambda fn: self.tool(fn, timeout=timeout)
+			return lambda fn: self.tool(fn, timeout=timeout, approval=approval)
 		name = fn.__name__
 		if name in self._tools:
 			raise ValueError(f'Tool \'{name}\' is already registered.')
@@ -68,6 +70,7 @@ class Registry:
 		self._tools[name] = {
 			'handler': fn,
 			'timeout': timeout,
+			'approval': approval,
 			'model': model,
 			'description': description,
 			'schema': {
@@ -107,6 +110,11 @@ class Registry:
 	def timeout(self, name):
 		tool = self._tools.get(name)
 		return tool['timeout'] if tool else None
+
+	# True if calls to this tool must be approved by the user first. Unknown names need nothing.
+	def needs_approval(self, name):
+		tool = self._tools.get(name)
+		return bool(tool and tool['approval'])
 
 	# Never raises for a bad call. Unknown tools and bad arguments are returned to the model as {'ok': False, ...}.
 	# Unexpected exceptions from a handler propagate, so the caller can log them with a traceback.
