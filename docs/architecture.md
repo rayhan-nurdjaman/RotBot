@@ -84,12 +84,12 @@ sequenceDiagram
     TG->>C: update
     C->>C: ignore if no message / no text and no photo
     C->>M: on_message_callback(chat_id, "user: text", image_bytes)
+    M->>M: take instance.lock (held until the reply is sent)
     M->>I: add_user_message (image resized and base64 encoded)
     M->>M: if always_on is off, stop here
     M->>M: always_on.should_respond() (always True)
     M->>C: open typing() context
     M->>A: get_response(instance)
-    A->>A: acquire instance.lock
     loop up to max_tool_steps
         A->>LLM: create(instance.get_context(), model, tools)
         alt finish_reason == tool_calls
@@ -110,7 +110,7 @@ In words:
 2. **`main.on_message`**. Adds the user message to the instance (resizing and base64-encoding any image). Returns early if `no_response` is set, or the chat's `always_on` flag is off, or `should_respond` says no. Otherwise runs the turn inside the typing indicator and sends the reply.
 3. **`assistant.get_response`**. Described fully in [`agent-loop.md`](agent-loop.md).
 
-The reminder path is the same from step 2: the scheduler calls `main.on_reminder`, which runs a turn with an `API: The reminder '...' is up...` message (stored by `get_response` under the chat lock) and sends the reply.
+The reminder path is the same from step 2: the scheduler calls `main.on_reminder`, which runs a turn with an `API: The reminder '...' is up...` message (stored under the chat lock, which `on_reminder` takes) and sends the reply.
 
 ## Concurrency model
 

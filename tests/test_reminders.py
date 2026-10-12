@@ -453,9 +453,7 @@ def test_delivery_stores_the_message_only_after_the_chat_lock_is_taken(delivery,
     monkeypatch.setattr(main.Assistant.ChatCompletion, 'create', create)
 
     async def go():
-        instance = main.get_instance('chat-1')
-        instance.add_user_message('alice: hi')
-        user_turn = asyncio.create_task(main.Assistant.get_response(instance))
+        user_turn = asyncio.create_task(main.on_message('chat-1', 'alice: hi'))
         await asyncio.sleep(0.01)                    # the user's turn is now inside its LLM call
         await main.on_reminder(reminder_row())
         await user_turn
@@ -465,3 +463,27 @@ def test_delivery_stores_the_message_only_after_the_chat_lock_is_taken(delivery,
     # The first request holds only the user's message. The reminder message is not part of it.
     assert seen[0] == ['user']
     assert seen[1] == ['user', 'assistant', 'user']
+
+
+def test_a_user_message_during_a_reminder_turn_never_makes_a_request_end_with_an_assistant_message(delivery, monkeypatch):
+    """The user-message half of issue #32: the reminder turn is in flight when a message arrives."""
+    from types import SimpleNamespace as NS
+    seen = []
+
+    async def create(messages, model, tools=None, chat_id=None, tool_choice=None):
+        seen.append([m['role'] for m in messages if m['role'] != 'system'])
+        await asyncio.sleep(0.05)
+        return NS(finish_reason='stop', message=NS(content='ok', tool_calls=None))
+
+    monkeypatch.setattr(main.Assistant.ChatCompletion, 'create', create)
+
+    async def go():
+        reminder = asyncio.create_task(main.on_reminder(reminder_row()))
+        await asyncio.sleep(0.01)                    # the reminder turn is now inside its LLM call
+        await main.on_message('chat-1', 'alice: hi')
+        await reminder
+
+    asyncio.run(go())
+
+    assert seen == [['user'], ['user', 'assistant', 'user']]
+    assert all(roles[-1] == 'user' for roles in seen)

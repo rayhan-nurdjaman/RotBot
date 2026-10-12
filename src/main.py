@@ -60,8 +60,8 @@ async def on_reminder(reminder, late_seconds=0):
 		message += f' It was due {_late_text(late_seconds)} ago (it could not be delivered earlier), so mention that it is late.'
 
 	try:
-		async with Client.typing(instance):
-			# The message is stored by get_response, once it holds the chat lock (see issue #32).
+		# The lock is held from storing the message to the end of the turn (see issue #32).
+		async with instance.lock, Client.typing(instance):
 			response = await Assistant.get_response(instance, message=message, raise_errors=True)
 	except openai.APIError:
 		logging.getLogger(__name__).exception(f'Could not word reminder {reminder["id"]} with the model, sending it as plain text.')
@@ -72,27 +72,30 @@ async def on_message(instance_id, text, images=None, no_response=False):
 	#TODO: add time taken here
     # The TODO below is outdated, as the current system must require an image or fallback to a model that has vision capabilities
 	instance = get_instance(instance_id)
-	if images:  # TODO: and image modality enabled
-		instance.add_user_message(text, Assistant.encode_image(images))
-	else:
-		instance.add_user_message(text)
+	# The lock is held from storing the message to sending the reply, so no other turn can append to the
+	# context in between and the request always ends with a user message (see issue #32).
+	async with instance.lock:
+		if images:  # TODO: and image modality enabled
+			instance.add_user_message(text, Assistant.encode_image(images))
+		else:
+			instance.add_user_message(text)
 
-	if no_response:
-		return
+		if no_response:
+			return
 
-	if not instance.always_on:
-		return
+		if not instance.always_on:
+			return
 
-	if not await AlwaysOn.should_respond(instance.get_context()):
-		return
+		if not await AlwaysOn.should_respond(instance.get_context()):
+			return
 
-	async with Client.typing(instance):
-		response = await Assistant.get_response(instance)
-	# The reply is already in the history, so a failed send is only logged (see issue #37).
-	try:
-		await Client.send_message(instance.unique_id, response)
-	except telegram.error.TelegramError:
-		logging.getLogger(__name__).exception(f'Could not send the reply to chat {instance.unique_id}.')
+		async with Client.typing(instance):
+			response = await Assistant.get_response(instance)
+		# The reply is already in the history, so a failed send is only logged (see issue #37).
+		try:
+			await Client.send_message(instance.unique_id, response)
+		except telegram.error.TelegramError:
+			logging.getLogger(__name__).exception(f'Could not send the reply to chat {instance.unique_id}.')
 
 
 # Commands, should somehow make a pipeline for defining them, maybe decorators?
@@ -112,10 +115,12 @@ async def toggle_always_on(instance_id):
 	instance = get_instance(instance_id)
 	instance.always_on = not instance.always_on
 	if instance.always_on:
-		instance.add_user_message('API: Always On is now enabled. You are now allowed to respond to user messages.')
+		async with instance.lock:
+			instance.add_user_message('API: Always On is now enabled. You are now allowed to respond to user messages.')
 		await Client.send_message(instance.unique_id, '_Always On is now Enabled_')
 	else:
-		instance.add_user_message('API: Always On is now disabled. You are not allowed to respond to user messages.')
+		async with instance.lock:
+			instance.add_user_message('API: Always On is now disabled. You are not allowed to respond to user messages.')
 		await Client.send_message(instance.unique_id, '_Always On is now Disabled_')
 
 # Model is chosen with /model, e.g. 'haiku-5.5-high'. An empty argument reports the current one.

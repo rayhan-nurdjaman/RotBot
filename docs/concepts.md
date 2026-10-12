@@ -47,7 +47,7 @@ Each rule says why. Do not break one without reading its reason.
 
 ### Behaviour rules
 
-12. **One turn at a time per chat.** `assistant.get_response` holds `instance.lock` for the whole turn. Without it, two quick messages interleave their tool rounds in one context.
+12. **One turn at a time per chat.** The callers of `assistant.get_response` (`main.on_message`, `main.on_reminder`) hold `instance.lock` from storing the message until the turn is finished. Without it, two quick messages interleave their tool rounds in one context, or a request ends with an assistant message.
 13. **Tools never raise out of a turn.** `assistant._process_tool_call` catches everything and returns `{"ok": false, "error": ...}` to the model so it can recover. A tool that raises would otherwise kill the turn.
 14. **A failed LLM call leaves the user's message in the context**, and nothing is stored for the failed reply, so the user can simply retry.
 15. **Reasoning text is never sent to the chat.** Users only see the typing indicator.

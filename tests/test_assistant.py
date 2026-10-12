@@ -165,15 +165,28 @@ def test_malformed_json_arguments_are_returned_to_the_model(instance, monkeypatc
     assert json.loads(instance.context_window[0]['tool_calls'][0]['function']['arguments']) == {}
 
 
-def test_concurrent_requests_on_one_instance_are_serialized(instance, monkeypatch):
+def test_concurrent_messages_on_one_chat_are_handled_one_turn_at_a_time(monkeypatch):
+    import main
     llm = FakeLLM([], default=final_response('ok'))
     install(monkeypatch, llm)
+    monkeypatch.setattr(main, 'instances', {})
+
+    async def indicator(instance, indicator):
+        pass
+
+    async def send_message(chat_id, message):
+        pass
+
+    monkeypatch.setattr(main.Client, 'send_indicator', indicator)
+    monkeypatch.setattr(main.Client, 'send_message', send_message)
 
     async def both():
-        return await asyncio.gather(Assistant.get_response(instance), Assistant.get_response(instance))
+        await asyncio.gather(main.on_message('chat-1', 'alice: one'), main.on_message('chat-1', 'alice: two'))
 
-    assert asyncio.run(both()) == ['ok', 'ok']
+    asyncio.run(both())
+
     assert llm.max_active == 1
+    assert [m['role'] for m in main.get_instance('chat-1').get_context() if m['role'] != 'system'] == ['user', 'assistant', 'user', 'assistant']
 
 
 def api_error(cls, status=None):

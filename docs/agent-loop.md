@@ -5,15 +5,14 @@ Implemented in `src/assistant.py`. Entry point: `assistant.get_response(instance
 ## Algorithm
 
 ```text
-get_response(instance, message=None, raise_errors=False):
-    async with instance.lock:                         # one turn per chat at a time
-        if message:
-            instance.add_user_message(message)        # stored under the lock, see below
-        try:
-            return await _run_turn(instance)
-        except openai.APIError as e:
-            if raise_errors: raise                    # for callers with their own fallback (reminders)
-            return _error_message(e)                  # nothing stored; user's message stays
+get_response(instance, message=None, raise_errors=False):   # the CALLER holds instance.lock
+    if message:
+        instance.add_user_message(message)            # e.g. a reminder's "API: ..." text
+    try:
+        return await _run_turn(instance)
+    except openai.APIError as e:
+        if raise_errors: raise                        # for callers with their own fallback (reminders)
+        return _error_message(e)                      # nothing stored; user's message stays
 
 _run_turn(instance):
     instance.drop_reasoning()                         # reasoning blocks never cross turns
@@ -85,9 +84,9 @@ The returned tuples are `(tool_call_id, tool_name, arguments_dict, result)` in *
 
 ## Locking and overlap
 
-`instance.lock` (an `asyncio.Lock`) is held for the whole turn, including tool execution and the retries. A second turn for the same chat waits for it.
+`instance.lock` (an `asyncio.Lock`) is taken by the **callers** of `get_response`, not by `get_response` itself: `main.on_message` (from storing the user message until the reply is sent), `main.on_reminder` (the same, for the `API: ...` reminder message) and `main.toggle_always_on` (while it stores its notice). The lock is therefore held for the whole turn, including tool execution and the retries, and a second turn for the same chat waits for it.
 
-**Caveat.** The lock serialises *LLM work*, not *what is in the context*. If a user message is appended to the context while another turn is waiting for the lock, the finished turn's reply is appended after it and the waiting turn then sends a request that **ends with an assistant message**, which Claude 5.5 rejects. See [known-issues.md](known-issues.md) item 1. Reminders avoid this: `get_response(instance, message=...)` stores its message only after taking the lock.
+**Why the caller.** The lock must cover storing the message too. Before #32 was fixed, `on_message` stored the message first and `get_response` took the lock afterwards: if another turn finished in between, its reply landed after the stored message and the waiting turn sent a request that **ended with an assistant message**, which Claude 5.5 rejects (HTTP 400). Nothing in code enforces that a new caller takes the lock; if you add one, take it before `add_user_message` and release it after the turn. See [known-issues.md](known-issues.md) item 1.
 
 ## Images
 

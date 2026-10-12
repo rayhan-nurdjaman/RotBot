@@ -8,17 +8,13 @@ Everything here was **reproduced or read directly in the code** on commit `3d28d
 
 ## Bugs (wrong behaviour today)
 
-### 1. Two quick messages in one chat make the second reply fail
+### 1. Two quick messages in one chat make the second reply fail (fixed, #32)
 
-**Symptom.** A user sends two messages quickly. They get one answer to the first, then `Something went wrong with that request. Please try again.` for the second.
+**What it was.** `main.on_message` added the user message to the context **before** waiting for the chat lock. If another turn finished in between, its answer (an `assistant` message) was appended after it, and the waiting turn sent a request that ended with an `assistant` message. Claude 5.5 rejects that with HTTP 400 "does not support assistant message prefill". Verified live on Haiku, Sonnet and Opus before the fix.
 
-**Cause.** `main.on_message` adds the user message to the context **before** waiting for the chat lock. The first turn finishes and appends its answer (an `assistant` message). The second turn then starts, and its request ends with that `assistant` message. Claude 5.5 rejects this with HTTP 400 "This model does not support assistant message prefill. The conversation must end with a user message." The `try/except` turns it into the generic error text and **nothing is stored**, so the context now ends with an assistant message until the next user message arrives.
+**The fix.** The callers now hold `instance.lock` themselves, from before the message is stored until the turn (and for `on_message` the send) is finished: `main.on_message`, `main.on_reminder` and the `/stfu` notice in `main.toggle_always_on`. `assistant.get_response` no longer takes the lock; it documents that the caller must. Tested by running a reminder turn and a user message at the same time and asserting that no request ends with an assistant message; removing the lock from `on_message` makes three tests fail.
 
-**Verified live** on Haiku, Sonnet and Opus (`last message role = ['user', 'assistant']`, second reply is the generic error).
-
-**When it can actually happen.** python-telegram-bot's `max_concurrent_updates` is 1 (verified), so two user messages from Telegram are processed strictly one after the other and this race does not occur between two Telegram updates. It will occur if `concurrent_updates` is ever raised. **Reminders no longer cause it**: `main.on_reminder` passes its `API:` message to `get_response(instance, message=...)`, which stores it only after taking the chat lock. Treat the user-message half as a latent bug that bites as soon as concurrency is raised.
-
-**Fix direction (not done for user messages).** Do for `main.on_message` what `on_reminder` already does: hand the text to `get_response(instance, message=...)` so it is stored under the lock. Or queue messages (planned in #21).
+**Consequences to know.** The lock is now held while the reply is being sent to Telegram. The `/model`, `/schizo`, `/autoroute`, `/memory` and `/forget` handlers do not take it (they do not touch the context except `/stfu`). A new caller of `get_response` that forgets the lock brings the bug back; nothing enforces it in code.
 
 ### 2. No spend cap, and every allowed user can change the model
 
