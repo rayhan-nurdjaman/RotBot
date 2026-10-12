@@ -13,6 +13,7 @@ from tools.registry import ToolContext
 import client as Client
 import chat_completion as ChatCompletion
 import router as Router
+import usage as Usage
 
 logger = logging.getLogger(__name__)
 
@@ -28,16 +29,25 @@ RATE_LIMIT_MESSAGE = 'I\'m being rate limited right now. Please try again in a m
 PROVIDER_MESSAGE = 'The model provider is having trouble right now. Please try again shortly.'
 CREDITS_MESSAGE = 'I\'m out of credits right now. Please let the bot owner know.'
 REQUEST_MESSAGE = 'Something went wrong with that request. Please try again.'
+CAP_MESSAGE = 'This chat has reached its spending limit for today. It resets at midnight.'
 
 # Public | Methods used in client.py
 # The caller must hold instance.lock, from before it stores the user message until this returns. One turn per chat
 # at a time, and nothing may be appended to the context in between, otherwise the request can end with an assistant
 # message, which Claude 5.5 rejects (issue #32).
 # message: text to store as a user message before the turn, e.g. an 'API: ...' event written by the caller.
-# raise_errors: let openai.APIError propagate instead of returning an error message, for callers with a fallback.
+# raise_errors: let openai.APIError and usage.CapReached propagate instead of returning an error message, for callers
+# with a fallback.
 async def get_response(instance, message=None, raise_errors=False):
 	if message:
 		instance.add_user_message(message)
+	try:
+		await Usage.check(instance.unique_id)
+	except Usage.CapReached:
+		if raise_errors:
+			raise
+		# Not stored in the context, like an API error: the user's message stays.
+		return CAP_MESSAGE
 	await instance.load_memory()
 	try:
 		return await _run_turn(instance)

@@ -36,6 +36,7 @@ What has been proven, and how. Use this to decide how much to trust a piece of b
 | An invalid model slug returns HTTP 400 and the user gets `REQUEST_MESSAGE` with their message kept | Real request |
 | `max_tokens` too small on Sonnet at max effort gives `finish_reason: length` with empty content, mapped to `LENGTH_MESSAGE` | Real request with `max_tokens=40` |
 | One `llm_call` log line is produced per call with real values | Real request |
+| Usage rows and the daily cap (#14, #31): with the cap set to $0.0005, a real Haiku turn answered and stored one row with OpenRouter's reported cost ($0.00074), the next turn returned the cap notice with no request, another chat's total stayed 0. Telegram was not involved | One script, temp database, about 0.1 cent |
 | `session_id`, `user`, `parallel_tool_calls`, `max_tokens` are accepted | Every request |
 | The key's limit, usage, and the public `/models` list (prices, reasoning options) | `GET /api/v1/key` and `GET /api/v1/models` |
 
@@ -55,7 +56,7 @@ What has been proven, and how. Use this to decide how much to trust a piece of b
 
 ## Covered by tests (Test)
 
-257 tests, see [`contributing.md`](contributing.md). They prove the logic given fakes: grouping and ordering of tool rounds, the step cap, every finish reason branch, each error mapping, tool timeouts, malformed arguments, the lock, trimming never leaving an orphan, chunked trimming, request ordering and breakpoint placement, no `temperature`, the typing task lifecycle, reasoning kept and dropped, the memory store and its limits, the reminder scheduler (ordering, wake-up, retry, restart, cancel) and its tools, command behaviour, the `llm_call` fields.
+274 tests, see [`contributing.md`](contributing.md). They prove the logic given fakes: grouping and ordering of tool rounds, the step cap, every finish reason branch, each error mapping, tool timeouts, malformed arguments, the lock, trimming never leaving an orphan, chunked trimming, request ordering and breakpoint placement, no `temperature`, the typing task lifecycle, reasoning kept and dropped, the memory store and its limits, the reminder scheduler (ordering, wake-up, retry, restart, cancel) and its tools, command behaviour, the `llm_call` fields.
 
 **Tests cannot prove** that Telegram, OpenRouter or the provider cache behave as assumed. That is what the Live list is for.
 

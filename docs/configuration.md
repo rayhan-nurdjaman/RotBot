@@ -29,6 +29,7 @@ Loaded into the dict `config.config` by `src/config.py` when first imported. Eve
 | `llm_timeout_s` | 180 | HTTP timeout per LLM request attempt. |
 | `llm_max_retries` | 2 | SDK retries for timeouts, connection errors, 408, 409, 429, 5xx (exponential backoff). |
 | `tool_timeout_s` | 30 | Per tool call. A timed-out tool returns an error to the model. |
+| `daily_cap_usd` | 1.00 | The most one chat may spend per calendar day (in `timezone`), in USD. Checked at the start of a turn, so one turn can overshoot. See [`usage-and-cap.md`](usage-and-cap.md). |
 
 There is no per-model, per-chat or per-persona config. Removed keys (do not re-add without wiring them up): `poll_rate`, `client_backend`, `assistant_backend`. The reminder scheduler has no config: its timings (`MAX_ATTEMPTS`, `RETRY_DELAYS`, `MAX_SLEEP`, `CRASH_RETRY`) are constants in `src/reminders.py`. Tests read these values through the `config` dict, so changing a value in the file can change test expectations that are derived from it.
 
@@ -85,6 +86,7 @@ Registered in `client.py` for every chat. Each runs only the first matching hand
 | `/autoroute` | none | Toggle auto routing. |
 | `/memory` | none | List this chat's memories with their ids (newest 30 at most, within 3000 characters; says how many older ones are not shown). |
 | `/forget` | `<id>` | Delete one memory of this chat. A missing or non-numeric id gives a usage message; an id that is not this chat's gives "no memory N in this chat". |
+| `/usage` | none | This chat's spend today (with the daily cap and what is left), over the last 7 days and in total. Only ever this chat's numbers. See [`usage-and-cap.md`](usage-and-cap.md). |
 
 An unregistered command such as `/aura` (removed) or `/stfu@some_other_bot` is not matched by a command handler and falls through to the **message** handler, so the bot answers it as ordinary text (verified). `/usage` is planned (#31) and does not exist.
 

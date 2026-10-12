@@ -66,6 +66,6 @@ All messages use the OpenAI Chat Completions shape. OpenRouter accepts it unchan
 | Memory | `data/rotbot.db`, table `memories` | **Yes** |
 | Reminders | `data/rotbot.db`, table `reminders` | **Yes** |
 | Logs | `app.log` (and stdout) | Yes |
-| Usage and cost | Only the `llm_call` log lines | Only as log text |
+| Usage and cost | `data/rotbot.db`, table `usage` (and the `llm_call` log lines) | **Yes**, see [`usage-and-cap.md`](usage-and-cap.md) |
 
-Persisting everything else in SQLite is planned (#18; the `db` module and the `reminders` and `memories` tables exist, the other tables do not). Until then, a restart wipes every conversation and setting, but not reminders or memories.
+Persisting everything else in SQLite is planned (#18; the `db` module and the `reminders`, `memories` and `usage` tables exist, the other tables do not). Until then, a restart wipes every conversation and setting, but not reminders or memories.

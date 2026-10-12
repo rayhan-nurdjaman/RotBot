@@ -27,6 +27,7 @@ from models import parse_model, EFFORTS, MODELS
 import db
 import memories as Memories
 import reminders as Reminders
+import usage as Usage
 
 instances = {}
 
@@ -63,7 +64,7 @@ async def on_reminder(reminder, late_seconds=0):
 		# The lock is held from storing the message to the end of the turn (see issue #32).
 		async with instance.lock, Client.typing(instance):
 			response = await Assistant.get_response(instance, message=message, raise_errors=True)
-	except openai.APIError:
+	except (openai.APIError, Usage.CapReached):
 		logging.getLogger(__name__).exception(f'Could not word reminder {reminder["id"]} with the model, sending it as plain text.')
 		response = f'Reminder: {reminder["description"]}'
 	await Client.send_message(instance.unique_id, response)
@@ -167,6 +168,10 @@ async def forget_memory(instance_id, text):
 	else:
 		await Client.send_message(instance_id, f'_There is no memory {memory_id} in this chat._')
 
+# Open to every allowed user, and shows only the chat it is sent in.
+async def show_usage(instance_id):
+	await Client.send_message(instance_id, await Usage.report(instance_id))
+
 # Keep in sync with the commands registered in client.py.
 HELP_TEXT = (
 	'Commands:\n'
@@ -176,7 +181,8 @@ HELP_TEXT = (
 	'/schizo [<personality>] - switch the personality of this chat. With no argument it lists the available ones\n'
 	'/stfu - toggle always-on replies\n'
 	'/memory - list what is saved in memory for this chat\n'
-	'/forget <id> - delete one memory, the id is shown by /memory'
+	'/forget <id> - delete one memory, the id is shown by /memory\n'
+	'/usage - show what this chat has spent today, over the last 7 days and in total'
 )
 
 async def show_help(instance_id):
@@ -196,6 +202,7 @@ async def main():
 	Client.toggle_auto_route_callback			= toggle_auto_route
 	Client.list_memories_callback				= list_memories
 	Client.forget_memory_callback				= forget_memory
+	Client.show_usage_callback					= show_usage
 
 	scheduler = None
 	try:

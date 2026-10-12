@@ -38,6 +38,23 @@ MIGRATIONS = [
 	);
 	CREATE INDEX memories_chat ON memories (chat_id, id);
 	''',
+	# 3: one row per LLM call, for per-chat spend (usage.py). Tokens and cost come from OpenRouter and may be NULL.
+	# cost is USD; created_at is Unix seconds in UTC.
+	'''
+	CREATE TABLE usage (
+		id					INTEGER PRIMARY KEY,
+		chat_id				INTEGER NOT NULL,
+		created_at			INTEGER NOT NULL,
+		model				TEXT NOT NULL,
+		effort				TEXT NOT NULL,
+		prompt_tokens		INTEGER,
+		completion_tokens	INTEGER,
+		reasoning_tokens	INTEGER,
+		cached_tokens		INTEGER,
+		cost				REAL
+	);
+	CREATE INDEX usage_chat ON usage (chat_id, created_at);
+	''',
 ]
 
 _connection = None

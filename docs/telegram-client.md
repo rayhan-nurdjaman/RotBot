@@ -23,7 +23,8 @@
 5. `CommandHandler('schizo', ...)`
 6. `CommandHandler('memory', ...)`
 7. `CommandHandler('forget', ...)`
-8. `MessageHandler(filters.ALL, on_message)`
+8. `CommandHandler('usage', ...)`
+9. `MessageHandler(filters.ALL, on_message)`
 
 PTB runs **only the first matching handler per group**. A command message matches both its command handler and the catch-all; the command handler wins because it is registered first. **Keep the catch-all last.** A slash command that is not registered (including a command addressed to another bot, `/stfu@other_bot`, and removed ones like `/aura`) is handled by the catch-all as **ordinary text**, so the bot may reply to it with the model. (Verified by matching real `Update` objects.)
 
@@ -72,6 +73,7 @@ Handlers in `client.py` only forward to callbacks; the logic is in `main.py`.
 | `/schizo` | `schizo` | `set_instance_personality(chat_id, key)` | first argument, lowercased; none passes an empty key and `main` lists the available personalities |
 | `/memory` | `memory` | `list_memories(chat_id)` | none |
 | `/forget` | `forget` | `forget_memory(chat_id, text)` | all arguments joined with spaces; `main` parses an integer id |
+| `/usage` | `usage` | `show_usage(chat_id)` | none |
 
 Command arguments are split on whitespace by PTB, so `/model haiku-5.5 high` passes the text `haiku-5.5 high` which is **not** valid (the format is `haiku-5.5-high`). There is no permission check on any command: anyone in a chat can toggle always-on, change the model (and so the cost) and change the persona. There is also no allow-list of chats: **any chat that finds the bot can use it and spend credit**.
 

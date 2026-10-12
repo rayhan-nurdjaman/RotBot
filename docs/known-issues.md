@@ -16,9 +16,9 @@ Everything here was **reproduced or read directly in the code** on commit `3d28d
 
 **Consequences to know.** The lock is now held while the reply is being sent to Telegram. The `/model`, `/schizo`, `/autoroute`, `/memory` and `/forget` handlers do not take it (they do not touch the context except `/stfu`). A new caller of `get_response` that forgets the lock brings the bug back; nothing enforces it in code.
 
-### 2. No spend cap, and every allowed user can change the model
+### 2. Every allowed user can change the model, and the spend cap is soft
 
-Only users in `ALLOWED_USER_IDS` can use the bot (#35, [`access-control.md`](access-control.md)). Among them there are **no per-user permissions**: any of them can run `/model opus-5.5-max` (about 40 times the per-token price of the default, and `max` effort uses a lot of reasoning tokens) and toggle `/autoroute`, `/stfu` and `/schizo` for any chat they are in. There is also no spend cap in the program (planned: #14, #31). The only limit is the key limit set in the OpenRouter dashboard.
+Only users in `ALLOWED_USER_IDS` can use the bot (#35, [`access-control.md`](access-control.md)). Among them there are **no per-user permissions**: any of them can run `/model opus-5.5-max` (about 40 times the per-token price of the default, and `max` effort uses a lot of reasoning tokens) and toggle `/autoroute`, `/stfu` and `/schizo` for any chat they are in. Each chat has a daily spend cap (1 dollar, see [`usage-and-cap.md`](usage-and-cap.md)); it is per chat, so many chats add up, and one turn can overshoot it. The only hard limit is the key limit set in the OpenRouter dashboard.
 
 ### 3. Server-tool results are not in the history, so the model may deny having used them
 

@@ -5,6 +5,7 @@ import logging
 import openai
 
 from config import config
+import usage as Usage
 
 logger = logging.getLogger(__name__)
 # Tool returns should be standardised to JSON
@@ -102,6 +103,7 @@ async def create(messages, model, tools=None, chat_id=None, tool_choice=None):
 	)
 	choice = response.choices[0]
 	_log_call(chat_id, model, choice, response.usage, time.monotonic() - start)
+	await Usage.record(chat_id, model, response.usage)
 	return choice
 
 # One JSON line per LLM call, prefixed 'llm_call', so spend and caching can be grepped out of app.log.

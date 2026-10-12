@@ -36,7 +36,7 @@ flowchart TD
 - `bash` runs only where you said, so a friend who is allowed to talk to the bot, in their own private chat, gets **no** shell.
 - **A group is different.** If a group id is in `OP_CHAT_IDS`, every allowed member of it can ask the model to run commands with your keys. If a group is *not* an op chat but an allowed user is in it, they can still talk to the bot there, without a shell.
 - A listed user's **reply** to a stranger's message still carries the stranger's quoted text into the conversation (`client.on_message` quotes the replied-to text). The stranger cannot send it themselves, but a listed user can forward it into the model's context.
-- Among allowed users there are no permissions: any of them can change `/model`, `/autoroute`, `/schizo` and `/stfu`, and `/forget` any memory of a chat they are in. Spend caps are #14 and #31.
+- Among allowed users there are no permissions: any of them can change `/model`, `/autoroute`, `/schizo` and `/stfu`, and `/forget` any memory of a chat they are in. Each chat has a daily spend cap (see [`usage-and-cap.md`](usage-and-cap.md)), but there is still no per-user limit.
 - Prompt injection through web pages or photos is not stopped by any of this (see [`tools.md`](tools.md)).
 - Reminders already stored still fire into their chat even if the chat is later removed.
 - The bot token and keys live in the same `.env`. Anyone with shell access can read them; an op chat is exactly that.

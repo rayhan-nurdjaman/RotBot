@@ -31,6 +31,7 @@ toggle_auto_route_callback			= None
 list_memories_callback				= None
 forget_memory_callback				= None
 show_help_callback					= None
+show_usage_callback					= None
 
 async def _handle_image(update, context):
 	# Telegram lists the sizes of a photo from smallest to largest. Take the largest, assistant.encode_image caps it.
@@ -190,6 +191,9 @@ async def forget(update: telegram.Update, context: telegram.ext.ContextTypes.DEF
 async def help(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
 	await show_help_callback(update.message.chat.id)
 
+async def usage(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
+	await show_usage_callback(update.message.chat.id)
+
 # Runs before every other handler (group -1). Anyone who is not on the allow-list is dropped here: no reply, and
 # nothing reaches the conversation. The log line has ids only, never the message text. An update with no sender
 # (a channel post, an anonymous group admin) is dropped too. If this function itself failed, PTB would carry on
@@ -202,9 +206,6 @@ async def gate(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAU
 	logger.warning(f'Dropped an update from a user who is not allowed: user id {user.id if user else None}, chat id {chat.id if chat else None}.')
 	raise telegram.ext.ApplicationHandlerStop
 
-# TODO(/usage): not implemented yet, see https://github.com/rayhan-nurdjaman/RotBot/issues/31
-# Any member of a chat can run it, and it shows only that chat's own usage and spend.
-
 application.add_handler(telegram.ext.TypeHandler(telegram.Update, gate), group=-1)
 application.add_handler(telegram.ext.CommandHandler('help', help))
 application.add_handler(telegram.ext.CommandHandler('stfu', toggle_always_on))
@@ -213,6 +214,7 @@ application.add_handler(telegram.ext.CommandHandler('autoroute', autoroute))
 application.add_handler(telegram.ext.CommandHandler('schizo', schizo))
 application.add_handler(telegram.ext.CommandHandler('memory', memory))
 application.add_handler(telegram.ext.CommandHandler('forget', forget))
+application.add_handler(telegram.ext.CommandHandler('usage', usage))
 application.add_handler(telegram.ext.MessageHandler(telegram.ext.filters.ALL, on_message))
 
 logger.info('Client object initialized.')

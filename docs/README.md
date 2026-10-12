@@ -28,6 +28,7 @@ If you are an agent or a new contributor, read in this order:
 | How do I add or change a tool? What tools exist and what do they return? | [`tools.md`](tools.md) |
 | Who can use the bot? Where can the shell tool run? How do I add a friend? | [`access-control.md`](access-control.md) |
 | How do models, efforts, `/model` and `/autoroute` work? What does the OpenRouter request look like? | [`models-and-openrouter.md`](models-and-openrouter.md) |
+| How is spend tracked, what does the daily cap do, what does `/usage` show? | [`usage-and-cap.md`](usage-and-cap.md) |
 | What does config file X contain? What are the env vars, commands, personalities? | [`configuration.md`](configuration.md) |
 | What is the Telegram client's behaviour, and what are its limits? | [`telegram-client.md`](telegram-client.md) |
 | What is known about adding MCP servers (issue #17), and what is the plan? | [`mcp.md`](mcp.md) |

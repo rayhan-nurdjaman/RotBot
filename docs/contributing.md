@@ -14,7 +14,7 @@ env/bin/pip install -r requirements-dev.txt    # runtime deps + pytest + pyflake
 cp .env.example .env                      # then fill in TELEGRAM_API_KEY and OPENROUTER_API_KEY
 ```
 
-Set a **hard spend limit on the OpenRouter key** in the OpenRouter dashboard. The program has no cap of its own.
+Set a **hard spend limit on the OpenRouter key** in the OpenRouter dashboard. The program has a daily cap per chat (`daily_cap_usd`), but it can be overshot by one turn and the bot cannot protect the key itself.
 
 ## Running
 
@@ -27,7 +27,7 @@ Logs go to stdout and `app.log`. Stop with Ctrl-C. A bot token must exist (creat
 ## Tests
 
 ```sh
-env/bin/python -m pytest -q               # 257 tests, about 2 seconds, no network
+env/bin/python -m pytest -q               # 274 tests, about 2 seconds, no network
 env/bin/python -m pyflakes src tests      # expect exactly 2 pre-existing warnings in src/
 ```
 
@@ -47,7 +47,8 @@ Layout (`tests/`):
 | `test_reminders.py` | Reminder store and scheduler (fake clock, temp database): ordering, wake-up, late-on-startup, retry and `failed`, restart, cancel; the three tools (ISO parsing, offsets, DST, past times, chat scoping); `on_reminder` delivery and the lock |
 | `test_clock.py` | Timezone, `stamp()`, message timestamps |
 | `test_db.py` | `db.init`, migrations, failed migration, newer database refused |
-| `test_client.py` | Stickers, photo failures and largest-size selection in `client.on_message` |
+| `test_usage.py` | Usage rows, per-chat totals, the daily cap and its midnight reset, the cap in `get_response` and reminders, `/usage` |
+| `test_client.py` | Stickers, photo failures and largest-size selection in `client.on_message`; message splitting and the plain-text retry in `send_message` |
 | `test_access.py` | The lists (parsing, bad entries, empty, fail closed), the refusal to start, and the gate: real `telegram.Update` objects through PTB's own dispatcher with Telegram's network blocked, strangers reach no handler, an allowed user does |
 | `test_bash.py` | The `bash` tool with real commands, and that it does nothing outside `OP_CHAT_IDS`: output, exit code, stderr, working directory, no stdin, truncation, binary output, timeout kills child processes |
 | `test_images.py` | `encode_image` (JPEG passthrough, long-edge cap, no enlarging, PNG with transparency) and that no `detail` field is stored |

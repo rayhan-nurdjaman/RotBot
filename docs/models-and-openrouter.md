@@ -98,7 +98,7 @@ Observed usage object (Haiku 5.5): `prompt_tokens`, `completion_tokens`, `comple
 
 ### Spend safety
 
-The bot has **no spend cap**. A cap per chat and a `/usage` command are planned (#14, #31, after SQLite). Meanwhile the only limit is the one set on the key in the OpenRouter dashboard (the current key reports a $50 limit). Cost in practice: a Haiku 5.5 turn with a warm cache is about $0.0001 to $0.0003; Opus costs roughly 40 times more per token.
+Each chat has a **daily spend cap** (`daily_cap_usd`, 1.00 dollar) and `/usage` shows the chat's own spend, see [`usage-and-cap.md`](usage-and-cap.md). The cap can be overshot by one turn and does not replace the limit on the key in the OpenRouter dashboard (the current key reports a $50 limit). Cost in practice: a Haiku 5.5 turn with a warm cache is about $0.0001 to $0.0003; Opus costs roughly 40 times more per token.
 
 ## Request failures
 

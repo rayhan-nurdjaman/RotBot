@@ -12,3 +12,6 @@ tool_timeout_s: 30
 # IANA timezone used to show the current time to the model and to read reminder times that have no UTC offset.
 # One zone for every chat. Times are stored in UTC, so changing this does not move existing reminders.
 timezone: Asia/Singapore
+# Most one chat may spend per calendar day (in `timezone`), in USD as OpenRouter reports cost. Checked at the start of a
+# turn, so a turn that starts just under the cap can end over it. See src/usage.py.
+daily_cap_usd: 1.00
