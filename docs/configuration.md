@@ -31,6 +31,7 @@ Loaded into the dict `config.config` by `src/config.py` when first imported. Eve
 | `llm_max_retries` | 2 | SDK retries for timeouts, connection errors, 408, 409, 429, 5xx (exponential backoff). |
 | `tool_timeout_s` | 30 | Per tool call. A timed-out tool returns an error to the model. A tool can declare its own limit with `@tool(timeout=...)`; `bash` does (`bash_max_timeout_s` + 10). |
 | `bash_max_timeout_s` | 120 | The longest a `bash` command may be asked to run (`timeout_seconds`). The default without asking is 20 s. While a command runs no other chat is answered, so keep it low. |
+| `approval_timeout_s` | 60 | How long a `bash` approval request waits for a button press before it counts as not answered ([`approvals.md`](approvals.md)). |
 | `workspace_root` | `'~'` | The folder `bash`'s `cwd` must be inside (and later the file tools). `~` is the home folder of the user running the bot. **Must be quoted**: unquoted `~` is YAML null and crashes startup. Not a sandbox, see [`tools.md`](tools.md). |
 | `daily_cap_usd` | 1.00 | The most one chat may spend per calendar day (in `timezone`), in USD. Checked at the start of a turn, so one turn can overshoot. See [`usage-and-cap.md`](usage-and-cap.md). |
 

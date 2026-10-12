@@ -9,6 +9,7 @@ All code is in `src/`. Modules import each other by bare name (`import client as
 | `src/access.py` | The allow-list (`ALLOWED_USER_IDS`) and the chats where `bash` may run (`OP_CHAT_IDS`), read from the environment by `load()`. Denies everybody until `load()` has run. | none |
 | `src/main.py` | Entry point, composition, and all chat-level logic: instance registry, message and reminder handlers, command handlers, startup and shutdown of the database and the reminder scheduler. | `client`, `assistant`, `always_on`, `instance`, `models`, `db`, `reminders` |
 | `src/client.py` | Everything Telegram: receives updates, sends messages, typing indicator, registers handlers. Calls back into `main` through module-level callback variables. **Builds the Telegram `Application` at import time**, so `TELEGRAM_API_KEY` must be set before importing it. | none |
+| `src/approvals.py` | Pending approval requests (in memory), their expiry timers, the day approval, the text shown to the user. See [`approvals.md`](approvals.md). | `clock`, `config` |
 | `src/assistant.py` | The agent loop: calls the model, runs tools, stores tool rounds, handles errors and finish reasons. Also `encode_image`. | `chat_completion`, `config`, `router`, `client`, `tools.native`, `tools.registry` |
 | `src/chat_completion.py` | The only module that talks to OpenRouter. Builds the request, logs one `llm_call` line per call. | `config` |
 | `src/instance.py` | The `Instance` class: conversation storage, trimming, request assembly, personality loading, a per-turn copy of the chat's memory. | `config`, `models` |
@@ -119,6 +120,7 @@ The reminder path is the same from step 2: the scheduler calls `main.on_reminder
 - Everything runs on **one asyncio event loop**. There are no threads.
 - python-telegram-bot is used with its default `max_concurrent_updates = 1` (verified): **updates are handled strictly one at a time**, in order. A long turn in one chat therefore blocks message handling for **all** chats until it finishes (up to many seconds, plus tool time). The per-instance `asyncio.Lock` in `get_response` is a second layer that matters only if this concurrency is ever raised, or if reminders (which run from the scheduler task, not from a Telegram update) overlap with a user message; the reminder side takes the lock before storing its message.
 - Within a turn, the tool calls from one model response run **concurrently** (`asyncio.gather`), each with its own timeout. Results are stored in the order the model made the calls, not the order they finished.
+- A turn that asks for an approval **ends** and frees the chat's lock; the button press (or the expiry timer, an `asyncio` task) starts the next part. See [`approvals.md`](approvals.md).
 - The reminder scheduler and the Telegram update handler run on the same loop. A slow reminder turn delays the other reminders (they are delivered one at a time), not Telegram updates.
 
 ## Message formats at the boundaries

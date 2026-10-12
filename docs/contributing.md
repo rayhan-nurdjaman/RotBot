@@ -27,7 +27,7 @@ Logs go to stdout and `app.log`. Stop with Ctrl-C. A bot token must exist (creat
 ## Tests
 
 ```sh
-env/bin/python -m pytest -q               # 316 tests, about 2 seconds, no network
+env/bin/python -m pytest -q               # 394 tests, about 2 seconds, no network
 env/bin/python -m pyflakes src tests      # expect exactly 2 pre-existing warnings in src/
 ```
 
@@ -39,6 +39,9 @@ Layout (`tests/`):
 | `test_assistant.py` | The agent loop: parallel tool grouping and order, step cap, finish reasons, error mapping, tool timeouts, malformed arguments, locking |
 | `test_instance.py` | Trimming: no orphaned tool messages, chunked trimming |
 | `test_cache.py` | Request ordering, breakpoint placement, tool list stability, `session_id`, `tool_choice` |
+| `test_approvals.py` | The approval store: one answer per request, expiry, midnight, callback data, display text |
+| `test_approval_buttons.py` | Button presses as real `telegram.Update` objects through PTB's dispatcher and the gate; the message and its buttons |
+| `test_approval_flow.py` | The whole approval flow through `main.py` with the real loop: approve, deny, day, expiry, holding messages, reminders, fail closed |
 | `test_models.py` | `parse_model`, the request body, `/model`, `/autoroute`, routing, "request never ends with an assistant message" |
 | `test_router.py` | The Jev router: request shape, state rules, every failure falling back, the `jev_call` line (HTTP is faked with `httpx.MockTransport`) |
 | `test_typing_and_reasoning.py` | Typing task lifecycle, reasoning kept within a loop and dropped between turns |

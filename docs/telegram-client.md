@@ -34,7 +34,7 @@ PTB is used with the default `max_concurrent_updates = 1`: updates are processed
 
 Behaviour, in order:
 
-1. `update.message is None` (edited messages, channel posts, callback queries, ...): ignored. Edited messages are therefore never seen.
+1. `update.message is None` (edited messages, channel posts, ...): ignored. (Button presses are `callback_query` updates and have their own handler, `approval_pressed`, see [`approvals.md`](approvals.md).) Edited messages are therefore never seen.
 2. `username = update.message.from_user.username`. This is **`None` for users without a Telegram username**, and the text then starts with `"None: "`. Chat history has no other notion of who spoke (no user id). Two users without usernames are indistinguishable. `from_user` can itself be `None` for anonymous admin or channel senders; that raises (not handled).
 3. **Reply prefix.** If the message replies to another: `*replying to '<replied text or caption>' by <replied username>* ` is prepended. It uses `reply.caption` if the **new** message has a photo, else `reply.text`. If the replied-to message has neither, the prefix says `None`. If `reply.from_user` is missing it raises (not handled).
 4. **Text.** `text` is used; if there is also a `caption`, **the caption replaces the text**. (A message cannot normally have both.)
@@ -49,6 +49,8 @@ Photo size selection: always the **largest** size Telegram offers (`message.phot
 | Function | Behaviour |
 |---|---|
 | `send_message(chat_id, text)` | Splits the text into pieces of at most 4096 characters (`split_message`: cuts at a blank line, else a newline, else a space, else hard-cuts). Each piece is sent with `parse_mode=MARKDOWN` (Telegram's **legacy** Markdown); if Telegram rejects it, the reason is logged as a WARNING and that piece is sent again as plain text. An empty or whitespace-only text is **not sent** (a WARNING is logged). If the plain-text send fails, the exception propagates. |
+| `send_approval_request(chat_id, text, request_id)` | Plain text (no Markdown), cut to 4096, with three inline buttons. Returns the message id. A failure **propagates** so the caller can refuse the command. See [`approvals.md`](approvals.md). |
+| `close_approval_request(chat_id, message_id, text)` | Edits the approval message to its outcome; with no `reply_markup` the buttons are removed (Telegram's documented behaviour, not observed). A failure is only logged. |
 | `send_client_message(chat_id, text)` | `send_message` with the text wrapped in `_..._` (italics). Unused now. |
 | `send_image`, `send_gif` | Thin wrappers over `send_photo` / `send_animation`. **Unused** (their tools were retired). |
 | `send_indicator(instance, indicator)` | Only `GENERATING_RESPONSE` does anything (sends the `typing` chat action). `REMINDER_CREATED` is accepted and ignored. |

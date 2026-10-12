@@ -21,6 +21,8 @@ _run_turn(instance):
         response = chat_completion.create(instance.get_context(), model, tools, chat_id)
         if response.finish_reason != "tool_calls" or no tool_calls on the message:
             return _finish(instance, response)
+        if a call needs approval and this is an op chat and the day is not approved:
+            return Suspended(tool calls, reasoning, model, steps left)   # nothing run, nothing stored (approvals.md)
         results = run all tool calls concurrently (each with its own timeout)
         instance.add_tool_round(results, reasoning_details_from_response)
     # step cap reached: force a text answer
@@ -32,6 +34,8 @@ _run_turn(instance):
 - The model is chosen **once per turn**, so every step of a tool loop uses the same model (reasoning blocks are bound to a model).
 - **Forced final answer.** After the cap, one more request is made with the *same tool list* and `tool_choice="none"`. The tool list is kept (not removed) so the cached prefix stays valid; `tool_choice="none"` was verified accepted on all three models. Pending tool calls from the last round are not executed.
 - There is **no overall deadline for a turn**. A turn can, in the worst case, take 9 LLM calls, each up to `llm_timeout_s` (180 s) times (1 + `llm_max_retries`) attempts, plus tool time.
+
+**Suspending and resuming.** `get_response` may return an `assistant.Suspended` instead of text. The caller (`main._settle`) asks the user and later calls `assistant.resume(instance, suspended, refusal=None)`, which runs all the step's calls (or refuses all of them with the `refusal` sentence), stores the tool round and continues the loop with the saved model and the remaining steps. Both are called with the chat's lock held. The step counter carries over, so a turn cannot exceed `max_tool_steps` rounds by being resumed. Full description: [`approvals.md`](approvals.md).
 
 ## Finish reasons (`_finish`)
 

@@ -90,7 +90,7 @@ Status key: **have** (in RotBot), **partly**, **missing**. "Beyond me" means I d
 | **X3** | The caller can ask for the **head or the tail** of the output. | `head_lines`, `tail_lines` | **have** (2026-10-12: `keep: "start"` or `"end"`, in characters, not lines; the first and last 8,000 are all it can return) | #51 |
 | **X4** | State between calls is documented and deliberate. A fresh shell per call is what I have, and it is acceptable if the model is told. If instead state persists, working directory and environment must be defined. | fresh shell per call | fresh shell per call | #51 lists "kept between calls" |
 | **X5** | **Background processes** with output polling and kill. | not available | missing | #51. **Beyond me.** |
-| **X6** | A command can be refused before it runs, and a refused command tells the model so. | editor approval prompts | missing | #43 |
+| **X6** | A command can be refused before it runs, and a refused command tells the model so. | editor approval prompts | **have** for `bash` (2026-10-12, [`approvals.md`](approvals.md)); the file tools will reuse it | #43 |
 
 ### Web
 
@@ -133,7 +133,7 @@ Status key: **have** (in RotBot), **partly**, **missing**. "Beyond me" means I d
 | ID | Requirement | Me | RotBot | Issue |
 |---|---|---|---|---|
 | **G1** | File and shell tools only run for people and chats the owner enabled. | editor user only | **have** for `bash` (`OP_CHAT_IDS`); to extend to file tools | #35 |
-| **G2** | Anything that writes, deletes or executes can be approved or refused, with exactly what will run shown first. | editor prompts | missing | #43 |
+| **G2** | Anything that writes, deletes or executes can be approved or refused, with exactly what will run shown first. | editor prompts | **have** for `bash` (buttons, [`approvals.md`](approvals.md)); to extend to the write tools | #43 |
 | **G3** | Text the model reads from files and the web is data, not instructions. | system prompt rule | in the `bash` docstring only; extend to every new tool | #51 |
 | **G4** | Every new tool has tests, a docs entry, and appends to the tool list without reordering it. | n/a | convention | #51, `tools.md` |
 | **G5** | Tool use stays inside the spend cap, including sub-agents. | n/a | cap exists; sub-agent spend not counted yet | #48 |
@@ -171,27 +171,15 @@ This is the design that #43 and the build order refer to. It is a design, not co
 | Denied or expired | The model is **told it was denied** (or expired) and asked to respond. The command does not run. |
 | A reminder going off during an approval | Not a bug in this design, see below. |
 
-**How it works (option A)**
+**How it works (revised and built 2026-10-12; the full reference is [`approvals.md`](approvals.md))**
 
-1. The model calls `bash`. If this chat has no "approved for the day" in force, the tool does **not** run the command. It stores the exact command with a new id and a deadline (now plus the expiry), sends the message with the three buttons, and **returns a result to the model** such as `{"awaiting_approval": true}`. A result must be returned: the API requires every tool call to have a matching result, so "return nothing" would leave an invalid history.
-2. The model words a short reply ("I've asked for approval"), and **the turn ends normally**. The chat's lock is released and the history is consistent (tool call, result, reply).
-3. When a button is pressed, the handler checks that the id exists, has not expired and was not already answered (a second press says so and does nothing). Then:
-   - **Approve** (this time or for the day): runs the stored command and adds the output to the chat as an `API:` user message (the way a reminder is added, `main.on_reminder`), then runs a model turn so the model can continue.
-   - **Deny**: adds `API: The user denied the command '<cut command>'. It did not run.` and runs a model turn.
-4. A **timer** for each request does the same as Deny when the 60 seconds pass, with the text "was not approved in time". The buttons are removed (the message edited) on press and on expiry, so they cannot be used twice.
-5. **Approve for the day** records that this chat is approved until local midnight in the configured timezone, and the command that was waiting runs now. **Open, see below.**
+The first draft had `bash` return `{"awaiting_approval": true}` and re-enter later with an `API:` message. The built design **suspends the whole step** instead: the tool calls are kept in memory and not stored in the history, nothing in the step runs, the turn ends, and the answer resumes the same turn (all calls run, or all are refused with the same sentence). It is atomic for parallel steps and the model only ever sees real results. The owner approved the change.
 
 **Why a reminder during an approval is fine.** The lock is held only while a turn runs, and step 2 ends the turn before anything waits. A reminder that comes due while the buttons are showing takes the lock, runs its own turn, sends its message, and releases it, exactly as when nothing is pending. The two share the chat without touching each other.
 
 The alternative the owner suggested, holding the lock for the whole wait and letting reminders queue behind it, was checked against the code and **would be harmful**: (a) reminders are delivered **one at a time** by `reminders.process_due`, so a reminder waiting for one chat's lock would delay every other chat's reminders for up to the expiry; (b) with updates handled one at a time, the press itself could not be processed while a turn held everything, which is the reason option A exists; (c) every message from the user in that chat would also queue, including the "yes". So the lock must **not** be held while waiting. No code needs to change for reminders.
 
-**Things that follow from it (decide or accept before building)**
-
-- **A restart forgets pending approvals** and any "approved for the day" (both kept in memory, *recommended*: re-asking is the safe failure, and nothing is lost that cannot be asked again). A press on an old message after a restart should answer "this request is no longer valid".
-- **Between the request and the answer, the chat carries on.** Other messages, and reminders, are handled normally. When the answer arrives, the `API:` message lands at the end of the history, possibly after unrelated messages. The model sees the command in the text, so it can place it.
-- **Several `bash` calls in one model step** (parallel tool calls) make several requests, each with its own buttons. Other tools called in the same step run at once, so the model can have partly acted before the approval. Accept, or allow one pending request per chat; not decided.
-- **The press runs a model turn**, so the daily spend cap applies and `Usage.CapReached` must be handled the way `on_reminder` does (tell the user plainly).
-- **The same buttons are reused** for every write tool (F2 to F4), with the command replaced by a short description of the change.
+**Things that follow from it (all described in [`approvals.md`](approvals.md))**: a restart forgets pending approvals; the chat carries on while buttons show (messages are held with one notice, reminders run); a press runs a model turn, so the daily cap applies on resume; the same buttons will be reused for write tools.
 
 **Decided on 2026-10-12 (second round)**
 
@@ -215,7 +203,7 @@ Same spirit as #51, with the gaps found here added and the 2026-10-12 decisions 
 
 1. ~~Settle the open points of the approval design~~ (settled 2026-10-12, section 5a; the weakness of "approve for the day" is tracked in #56).
 2. ~~**X3, X1, X2** (head and tail, working directory, timeout).~~ **Done 2026-10-12.** The deny list part of X1 is not built: it belongs with F5 and the file tools.
-3. **Approval buttons** for `bash` (X6, G2, option A of #43), since every later write tool reuses them. Check: tests with a stand-in bot for the message, the id and the stored command, a press by an allowed and by a not-allowed user, an expired request; then a manual try on real Telegram by the owner.
+3. ~~**Approval buttons** for `bash` (X6, G2, option A of #43), since every later write tool reuses them.~~ **Built 2026-10-12, see [`approvals.md`](approvals.md); not yet tried on real Telegram.** Check: tests with a stand-in bot for the message, the id and the stored command, a press by an allowed and by a not-allowed user, an expired request; then a manual try on real Telegram by the owner.
 4. **S1, S2, F1, F4 read side** (`glob`, `grep`, `read_file`, `list_directory`), read-only. Check: temp-directory tests for the size bound, paging, the root and the deny list.
 5. **F2, F3, F4 write side** (`write_file`, exact `edit_file`, create, move, copy, delete), all behind the buttons. Check: tests for exactly-once, all-or-nothing, nearest-line errors and no escape from the root.
 6. **C2 stop** (and #21 events, which also settles C1).
