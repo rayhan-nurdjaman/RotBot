@@ -66,3 +66,53 @@ def test_logging_an_image_only_message_does_not_crash(tmp_path, monkeypatch, cap
         instance.add_assistant_message('nice picture')
 
     assert len(instance.context_window) == 2
+
+
+TOKEN = '7521151946:AAEUIRahSYxLa7HW2fgZj_l267UadHHIs8x'
+
+
+def format_with(formatter, message, args=(), exc_info=None):
+    record = logging.LogRecord('httpx', logging.INFO, __file__, 1, message, args, exc_info)
+    return formatter.format(record)
+
+
+def test_the_telegram_token_is_redacted_from_a_request_line():
+    import logsafe
+    formatter = logsafe.RedactingFormatter('%(name)s - %(message)s')
+
+    line = format_with(formatter, 'HTTP Request: %s "%s"', (f'POST https://api.telegram.org/bot{TOKEN}/sendMessage', 'HTTP/1.1 200 OK'))
+
+    assert TOKEN not in line
+    assert 'AAEUIRahSYx' not in line
+    assert line == 'httpx - HTTP Request: POST https://api.telegram.org/bot<redacted>/sendMessage "HTTP/1.1 200 OK"'
+
+
+def test_the_telegram_token_is_redacted_from_a_traceback():
+    import logsafe
+    formatter = logsafe.RedactingFormatter('%(message)s')
+    try:
+        raise RuntimeError(f'failed for https://api.telegram.org/bot{TOKEN}/getUpdates')
+    except RuntimeError:
+        import sys
+        text = format_with(formatter, 'polling failed', exc_info=sys.exc_info())
+
+    assert TOKEN not in text
+    assert 'bot<redacted>/getUpdates' in text
+
+
+def test_ordinary_log_text_is_not_changed():
+    import logsafe
+    formatter = logsafe.RedactingFormatter('%(message)s')
+    text = 'llm_call {"chat_id": 1928665921, "cost": 0.0007} at 08:53:12, ratio 3:1, user alice: hi'
+
+    assert format_with(formatter, text) == text
+
+
+def test_the_programs_own_log_handlers_redact_the_token():
+    import logsafe
+    import main
+
+    assert len(main.log_handlers) == 2
+    for handler in main.log_handlers:
+        assert isinstance(handler.formatter, logsafe.RedactingFormatter)
+        assert TOKEN not in format_with(handler.formatter, f'POST https://api.telegram.org/bot{TOKEN}/sendMessage')

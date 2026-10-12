@@ -20,6 +20,7 @@ All code is in `src/`. Modules import each other by bare name (`import client as
 | `src/memories.py` | The memory store (add with limits and a secrets filter, search, list for the prompt, delete), scoped per chat. | `db`, `clock` |
 | `src/reminders.py` | The reminder store (add, list, cancel) and the scheduler task that delivers due reminders with retries. | `db`, `clock` |
 | `src/db.py` | The shared SQLite connection (`aiosqlite`) and numbered migrations. | none |
+| `src/logsafe.py` | A log formatter that redacts the Telegram bot token from every record. Used by the handlers set up in `main.py`. | none |
 | `src/usage.py` | Records one row per LLM call (tokens, cost) and enforces the daily spend cap per chat; the text of `/usage`. | `db`, `clock`, `config` |
 | `src/clock.py` | The configured timezone, `now()`, `stamp()`. Tests replace `now`. | `config` |
 | `src/config.py` | Loads `config/config.yaml` into the dict `config`. | none |

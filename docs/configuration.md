@@ -96,7 +96,7 @@ Command replies are written by `main.py` and wrapped in underscores (Telegram it
 
 | Path | Created by | Contents |
 |---|---|---|
-| `app.log` | `main.py` logging | All log output, including every user message and bot reply (INFO) and one `llm_call` line per LLM call. Not rotated. Gitignored. |
+| `app.log` | `main.py` logging | All log output, including every user message and bot reply (INFO) and one `llm_call` line per LLM call. Not rotated. Gitignored. The Telegram bot token is redacted (`<redacted>`) from every line by `src/logsafe.py`; lines written before that change still contain it. Message content is not redacted. |
 
 | `data/rotbot.db` | startup (`db.init()`) | SQLite database: the `reminders` and `memories` tables. Gitignored (`data`). Deleting it deletes every pending reminder and all memory. |
 

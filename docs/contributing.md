@@ -27,7 +27,7 @@ Logs go to stdout and `app.log`. Stop with Ctrl-C. A bot token must exist (creat
 ## Tests
 
 ```sh
-env/bin/python -m pytest -q               # 274 tests, about 2 seconds, no network
+env/bin/python -m pytest -q               # 278 tests, about 2 seconds, no network
 env/bin/python -m pyflakes src tests      # expect exactly 2 pre-existing warnings in src/
 ```
 
@@ -41,7 +41,7 @@ Layout (`tests/`):
 | `test_cache.py` | Request ordering, breakpoint placement, tool list stability, `session_id`, `tool_choice` |
 | `test_models.py` | `parse_model`, the request body, `/model`, `/autoroute`, routing, "request never ends with an assistant message" |
 | `test_typing_and_reasoning.py` | Typing task lifecycle, reasoning kept within a loop and dropped between turns |
-| `test_logging.py` | The `llm_call` line, image-only message logging |
+| `test_logging.py` | The `llm_call` line, image-only message logging, redaction of the bot token from log lines and tracebacks |
 | `test_registry.py` | Registry: schema generation, strict mode, validation, result shape, prompt section |
 | `test_memory.py` | The memory store (limits, duplicates, secrets filter, search ranking, per-chat scoping, persistence), the memory message and its caps, once-per-turn loading, the three tools, `/memory` and `/forget` |
 | `test_reminders.py` | Reminder store and scheduler (fake clock, temp database): ordering, wake-up, late-on-startup, retry and `failed`, restart, cancel; the three tools (ISO parsing, offsets, DST, past times, chat scoping); `on_reminder` delivery and the lock |

@@ -1,12 +1,17 @@
 import logging
 
+import logsafe
+
+log_handlers = [
+    logging.FileHandler("app.log"),
+    logging.StreamHandler()
+]
+for log_handler in log_handlers:
+    log_handler.setFormatter(logsafe.RedactingFormatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler("app.log"),
-        logging.StreamHandler()
-    ]
+    handlers=log_handlers
 )
 
 import asyncio
