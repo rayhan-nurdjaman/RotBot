@@ -38,6 +38,9 @@ What has been proven, and how. Use this to decide how much to trust a piece of b
 | One `llm_call` log line is produced per call with real values | Real request |
 | Usage rows and the daily cap (#14, #31): with the cap set to $0.0005, a real Haiku turn answered and stored one row with OpenRouter's reported cost ($0.00074), the next turn returned the cap notice with no request, another chat's total stayed 0. Telegram was not involved | One script, temp database, about 0.1 cent |
 | `session_id`, `user`, `parallel_tool_calls`, `max_tokens` are accepted | Every request |
+| The cache is lost by a trailing message only when `web_search` has `engine: exa`; other parameters of `web_search`, `web_fetch` and function tools are fine; Haiku and Sonnet behave alike (Opus not tested) | 15 three-turn scenarios, full table in [`caching-and-server-tools.md`](caching-and-server-tools.md), about 20 cents |
+| `web_search` with `engine: exa` and caps gave 2,620 prompt tokens for a search turn, without the engine about 13,400 | One request each, Haiku |
+| A request-level `models: [...]` list does not rescue an invalid primary slug (400 "not a valid model ID"); its behaviour for provider errors is **not tested** | Four direct requests |
 | The key's limit, usage, and the public `/models` list (prices, reasoning options) | `GET /api/v1/key` and `GET /api/v1/models` |
 
 ## Verified by running local code (not the network)

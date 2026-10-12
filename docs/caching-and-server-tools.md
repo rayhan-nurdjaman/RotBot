@@ -2,11 +2,11 @@
 
 **Read this before changing how `get_context()` builds a request, or before adding or removing a server tool** (`openrouter:web_search`, `openrouter:web_fetch`, anything with a type starting `openrouter:`).
 
-Measured on 2026-10-11 against the live OpenRouter API with `anthropic/claude-haiku-5.5` (`reasoning.effort: low`). Everything below is an observation. The **cause is not known**, and OpenRouter may change this behaviour at any time. If you can re-run the recipe at the end, do.
+Measured on 2026-10-11 against the live OpenRouter API with `anthropic/claude-haiku-5.5` (`reasoning.effort: low`). Everything below is an observation. The **trigger is known (see the follow-up) but the cause is not**, and OpenRouter may change this behaviour at any time. If you can re-run the recipe at the end, do.
 
 ## The rule
 
-> **With any `openrouter:*` server tool in the `tools` list, the request must not contain anything after the history.** The last message of the request must be the last message of the stored history, and that message carries the one cache breakpoint. Per-request data (current time, memory) must not be added as a trailing message or as an extra part of the last message.
+> **While `web_search` is configured with `engine: exa` (as it is now), the request must not contain anything after the history.** (The first measurements blamed server tools in general; the 2026-10-12 follow-up below narrowed it to that parameter.) The last message of the request must be the last message of the stored history, and that message carries the one cache breakpoint. Per-request data (current time, memory) must not be added as a trailing message or as an extra part of the last message.
 
 If you break this rule nothing fails. The bot works, replies look normal, and **every request becomes a full cache write: 0 cache reads**. Cost rises, silently. The only symptom is `cached_tokens: 0` in the `llm_call` log lines (and `cache_write_tokens` roughly equal to `prompt_tokens`).
 
@@ -39,7 +39,45 @@ What this shows:
 - Server tools alone (case 2) and a trailing message alone (case 1) are both fine. **The combination is what breaks.**
 - The text of the trailing message does not matter (cases 3, 4 and 5), nor where the breakpoints are (6 and 7), nor whether it is a separate message or a part of the last one (8).
 - Case 9 shows this was already hurting the pushed code for any chat with saved memory, from commit `09c33ff` until it was fixed by this change.
-- It is unknown whether one of the two server tools causes it (only the pair was tested), whether it depends on the model (Sonnet and Opus were not tested), or whether it is the provider or OpenRouter's server-tool handling that rewrites or reorders the request. If you find out, update this page.
+- Narrowed down on 2026-10-12, see [the follow-up](#follow-up-which-parameter-triggers-it-2026-10-12) below. The trigger is the `engine: exa` parameter of `web_search`, not the server tools in general. Why it breaks the cache is still unknown.
+
+## Follow-up: which parameter triggers it (2026-10-12)
+
+Same method as above (padded prompt of about 10,000 tokens, `session_id` fixed, three consecutive turns, a trailing volatile message on every request unless noted, one cache breakpoint on the newest history message). Each cell is `prompt_tokens / cached_tokens` for turns 1, 2 and 3. About 20 cents in total.
+
+| Tool list | Model | Cache reads, turns 2 and 3 |
+|---|---|---|
+| function tools + `web_search` (our parameters) + `web_fetch`, **no** trailing message | Haiku | 11080 and 11089: works |
+| same list, trailing message | Haiku | **0 and 0** |
+| function tools + `web_search` (our parameters), trailing message | Haiku | **0 and 0** |
+| function tools + `web_fetch` only, trailing message | Haiku | 10860 and 10869: works |
+| function tools only, trailing message | Haiku | 10099 and 10108: works |
+| function tools + `web_search` with **no parameters**, trailing message | Haiku | 12629 and 12638: works |
+| `web_search` with no parameters, alone, trailing message | Haiku | 11122 and 11131: works |
+| `web_search` with our parameters, alone, trailing message | Haiku | **0 and 0** |
+| `web_search` with only `engine: exa`, trailing message | Haiku | **0 and 0** |
+| `web_search` with only `max_results: 3`, trailing message | Haiku | 11119 and 11128: works |
+| `web_search` with only `max_characters: 1500`, trailing message | Haiku | 11121 and 11130: works |
+| `web_search` with only `max_uses: 3`, trailing message | Haiku | 11124 and 11133: works |
+| function tools + `web_search` + `web_fetch`, no trailing message | Sonnet | 11081 and 11090: works |
+| same list, trailing message | Sonnet | **0 and 0** |
+| function tools + `web_search` with no parameters, trailing message | Sonnet | 11112 and 11121: works |
+
+What this shows:
+
+- **The trigger is `engine: exa`.** Every other parameter of `web_search`, and `web_fetch`, can sit next to a trailing message without losing the cache. It is not "server tools in general", as this page first assumed.
+- **Sonnet behaves like Haiku** (Opus was not tested).
+- The cause is still unknown. It is plausible that OpenRouter handles a request with the Exa engine differently (inferred, nothing in the responses says so).
+
+Why the code still sends `engine: exa` (decision: keep it, the owner has not asked to change it). Same question, one request, Haiku:
+
+| `web_search` parameters | Prompt tokens | Cost |
+|---|---|---|
+| `engine: exa`, `max_results: 3`, `max_characters: 1500`, `max_uses: 3` (the code) | 2,620 | $0.0073 |
+| the same without `engine` | 13,381 | $0.0115 |
+| no parameters at all | 13,992 | $0.0116 |
+
+With Exa the size caps work and the search results stay small; with the default engine the caps seem not to apply (inferred from the token counts) and a search turn carries about 11,000 more prompt tokens, which also sit in the history afterwards. One request each, so this is an indication, not a benchmark. **If the engine is ever dropped** the trailing-message design (current time and memory after the history, no stamps) becomes possible again, at the price above. Re-run the recipe first.
 
 ## The design that works (since the #20 work)
 
@@ -87,7 +125,7 @@ Cache reads are about 99 percent of the prompt after the first turn, with server
 
 ## Related
 
-- GitHub issue #41 ("Prompt cache is disabled by any trailing message when OpenRouter server tools are in the request"). Keep it open until the cause is known or the behaviour is confirmed gone.
+- GitHub issue #41 ("Prompt cache is disabled by any trailing message when OpenRouter server tools are in the request"). Closed on 2026-10-12 with the trigger identified (the `engine: exa` parameter).
 - [`context-and-caching.md`](context-and-caching.md): message shapes, trimming and breakpoints in general.
 - [`tools.md`](tools.md): the server tools themselves.
 - [`verification-status.md`](verification-status.md): what was measured.

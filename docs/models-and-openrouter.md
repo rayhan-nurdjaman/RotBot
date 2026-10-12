@@ -82,7 +82,7 @@ Precedence for a turn (`assistant._run_turn`): `if instance.auto_route: router.r
 | `tool_choice` | only `"none"`, only when `tools` is given | used for the forced final answer after the step cap |
 | `temperature`, `top_p`, `top_k` | **never sent** | Claude 5.5 rejects non-default values |
 
-Not sent: attribution headers (`HTTP-Referer`, `X-OpenRouter-Title`), `reasoning.max_tokens`, `reasoning.exclude`, `models` (fallback list), `provider` preferences. Per the issue text (OpenRouter's migration notes, not verified here), Haiku 5.5's tokenizer produces about 30 percent more tokens than Haiku 4.5; no token limits in this repo depend on it yet.
+Not sent: attribution headers (`HTTP-Referer`, `X-OpenRouter-Title`), `reasoning.max_tokens`, `reasoning.exclude`, `models` (fallback list; tried on 2026-10-12: it does **not** rescue an invalid primary slug, which still returns HTTP 400 "not a valid model ID"; whether it helps when a provider is down or rate limited was **not** tested, and it would change the model silently under a visible `/model`, so it is not used), `provider` preferences. Per the issue text (OpenRouter's migration notes, not verified here), Haiku 5.5's tokenizer produces about 30 percent more tokens than Haiku 4.5; no token limits in this repo depend on it yet.
 
 Messages are explicitly assembled by `Instance.get_context()`; see [`context-and-caching.md`](context-and-caching.md).
 

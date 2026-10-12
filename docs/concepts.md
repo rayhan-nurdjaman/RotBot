@@ -41,7 +41,7 @@ Each rule says why. Do not break one without reading its reason.
 ### Context and cache rules
 
 8. **The front of the request must be identical between requests**, or the prompt cache misses and every request is billed at full price. This is why history is trimmed in chunks, memory sits right after the system prompt, and the system prompt never contains per-request data.
-9. **Never put volatile data in the system prompt, and never add anything after the last history message.** With server tools in the request a trailing message disables the cache completely and silently (measured, cause unknown: [`caching-and-server-tools.md`](caching-and-server-tools.md)). Per-request data such as the time is stamped into the user message when it is stored.
+9. **Never put volatile data in the system prompt, and never add anything after the last history message.** With `web_search` configured with `engine: exa` (as now) a trailing message disables the cache completely and silently (measured; the trigger is that parameter, why it breaks the cache is unknown: [`caching-and-server-tools.md`](caching-and-server-tools.md)). Per-request data such as the time is stamped into the user message when it is stored.
 10. **Cache breakpoints are added to a copy at request time, never to the stored context.** Otherwise they pile up. Providers limit how many breakpoints a request may carry (Anthropic documents 4; not tested here).
 11. **The stored context never starts with a `tool` message.** `_trim_context` drops leading tool messages after trimming, because their `tool_calls` message was cut off and providers reject orphans.
 
