@@ -22,6 +22,24 @@ class ToolContext:
 class ToolError(Exception):
 	pass
 
+# Pydantic writes an optional argument (`str | None`) as anyOf: [{type: string}, {type: null}]. With the
+# openrouter:web_search server tool in the same request, Claude then sends the TEXT "null" instead of JSON null
+# (measured 2026-10-12: 13 of 18 bash calls on Haiku, 6 of 18 on Sonnet, no persona wording changed it). The same
+# meaning written as type: [string, null] was never wrong (0 of 36). So a nullable argument with one simple type is
+# rewritten that way. Anything more complex is left as Pydantic wrote it. See docs/approvals.md.
+def _flatten_nullable(property_schema):
+	options = property_schema.get('anyOf')
+	if not options or len(options) != 2 or {'type': 'null'} not in options:
+		return property_schema
+	other = next(option for option in options if option != {'type': 'null'})
+	if not isinstance(other.get('type'), str) or set(other) - {'type', 'enum'}:
+		return property_schema
+	flat = {key: value for key, value in property_schema.items() if key != 'anyOf'}
+	flat['type'] = [other['type'], 'null']
+	if 'enum' in other:
+		flat['enum'] = [*other['enum'], None]
+	return flat
+
 def _validation_message(error):
 	return '; '.join(f'{".".join(str(part) for part in e["loc"])}: {e["msg"]}' for e in error.errors())
 
@@ -63,7 +81,7 @@ class Registry:
 		schema.pop('title', None)
 		for property_schema in schema.get('properties', {}).values():
 			property_schema.pop('title', None)
-		schema['properties'] = schema.get('properties', {})
+		schema['properties'] = {key: _flatten_nullable(value) for key, value in schema.get('properties', {}).items()}
 		schema['required'] = list(schema['properties'])
 		schema['additionalProperties'] = False
 

@@ -27,7 +27,7 @@ Logs go to stdout and `app.log`. Stop with Ctrl-C. A bot token must exist (creat
 ## Tests
 
 ```sh
-env/bin/python -m pytest -q               # 394 tests, about 2 seconds, no network
+env/bin/python -m pytest -q               # 398 tests, about 2 seconds, no network
 env/bin/python -m pyflakes src tests      # expect exactly 2 pre-existing warnings in src/
 ```
 

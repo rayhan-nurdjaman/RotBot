@@ -272,3 +272,59 @@ def test_bash_description_tells_the_model_it_may_be_denied():
     description = next(s['function']['description'] for s in native_registry.schemas() if s['type'] == 'function' and s['function']['name'] == 'bash')
 
     assert 'approve' in description and 'denied' in description and 'no sandbox' in description
+
+
+def test_an_optional_argument_is_written_as_a_type_list_not_anyof(registry):
+    from typing import Literal
+
+    @registry.tool
+    async def opt(ctx, a: Annotated[str | None, Field(description='A.')], b: Annotated[int | None, Field(description='B.')],
+                  c: Annotated[Literal['start', 'end'] | None, Field(description='C.')], d: Annotated[str, Field(description='D.')]):
+        """Doc."""
+        return {}
+
+    properties = registry.schemas()[0]['function']['parameters']['properties']
+
+    assert properties['a'] == {'description': 'A.', 'type': ['string', 'null']}
+    assert properties['b'] == {'description': 'B.', 'type': ['integer', 'null']}
+    assert properties['c'] == {'description': 'C.', 'type': ['string', 'null'], 'enum': ['start', 'end', None]}
+    assert properties['d'] == {'description': 'D.', 'type': 'string'}
+    assert 'anyOf' not in str(properties)
+    assert registry.schemas()[0]['function']['parameters']['required'] == ['a', 'b', 'c', 'd']
+
+
+def test_a_complex_union_is_left_as_pydantic_wrote_it(registry):
+    @registry.tool
+    async def union(ctx, a: Annotated[str | int, Field(description='A.')], b: Annotated[list[str] | None, Field(description='B.')]):
+        """Doc."""
+        return {}
+
+    properties = registry.schemas()[0]['function']['parameters']['properties']
+
+    assert 'anyOf' in properties['a']
+    assert 'anyOf' in properties['b']
+
+
+def test_null_is_still_accepted_and_the_text_null_is_not(registry):
+    @registry.tool
+    async def opt(ctx, a: Annotated[str | None, Field(description='A.')]):
+        """Doc."""
+        return {'a': a}
+
+    ctx = ToolContext(instance=SimpleNamespace(unique_id=1), client=None)
+
+    assert asyncio.run(registry.call('opt', {'a': None}, ctx)) == {'ok': True, 'a': None}
+    assert asyncio.run(registry.call('opt', {'a': 'x'}, ctx)) == {'ok': True, 'a': 'x'}
+
+
+def test_bash_arguments_have_no_anyof():
+    from tools.native import registry as native_registry
+
+    bash = next(s['function'] for s in native_registry.schemas() if s['type'] == 'function' and s['function']['name'] == 'bash')
+    properties = bash['parameters']['properties']
+
+    assert 'anyOf' not in str(properties)
+    assert properties['cwd']['type'] == ['string', 'null']
+    assert properties['timeout_seconds']['type'] == ['integer', 'null']
+    assert properties['keep']['enum'] == ['start', 'end', None]
+    assert bash['strict'] is True and bash['parameters']['required'] == ['command', 'cwd', 'timeout_seconds', 'keep']

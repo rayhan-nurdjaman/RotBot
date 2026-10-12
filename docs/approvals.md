@@ -73,10 +73,31 @@ sequenceDiagram
 - **Live, no Telegram (2026-10-12, Haiku 5.5, about 0.3 cent):** a real model asked for `echo` commands; the step suspended with nothing run and the lock free; Approve ran it and the model reported the output; Deny made it say it would not retry; a 2 s timeout expired and the model was told; a message typed while waiting was held, one notice sent and both answered after approval; a step with `bash` plus `list_reminders` ran neither before the press; after Approve for the day a second command ran with no request. Cache reads stayed at 97 to 99 percent of the prompt through all 16 requests.
 - **Not verified: real Telegram.** That a button press arrives at the bot (`callback_query` is in PTB's default update list, and `start_polling` is called without `allowed_updates`, read from the code, not observed), that editing the message with no `reply_markup` removes the buttons (documented Telegram behaviour, not tried), and how it looks on a phone. The owner has to try it, see the list in [`verification-status.md`](verification-status.md).
 
+## The `"null"` text problem (found and fixed 2026-10-12)
+
+**What happened.** In the first live run, one `echo` produced three approval requests because Haiku sent `"cwd": "null"` (the four-letter *text*) instead of JSON `null` for optional arguments. The call failed validation, the model retried, and each attempt was asked about again.
+
+**What did not help.** Persona wording. Three versions of a rule added to the `base` persona's "General Behavior" (a plain rule; a rule with the wrong form shown; a right and a wrong example side by side) each left **18 of 18** calls wrong on Haiku, the same as no rule. The edit did reach the request (checked with a marker). So the base persona was left unchanged.
+
+**What caused it.** Bisecting the request: `bash` alone, with the full system prompt, with all function tools: 0 of 4 wrong. Adding the `openrouter:web_search` server tool: 4 of 4 wrong (`web_fetch` alone: 0 of 4). Pydantic writes `str | None` as `anyOf: [{"type": "string"}, {"type": "null"}]`. With `web_search` in the list, Claude reads that as "write the word null". The same meaning written as `"type": ["string", "null"]` was never wrong. Turning off `strict`, which also was tried, did not help.
+
+**The fix.** `tools/registry._flatten_nullable` writes a nullable argument with one simple type as `type: [x, "null"]` (and `enum: [..., null]`). Anything more complex (a union of several types, a list) is left as Pydantic writes it. Optional arguments are still required-but-nullable, so strict mode and the tool order are unchanged. **Every chat's next request after deploy is a one-time cache write**, because the tool list changed.
+
+**Measured on `bash` (48 calls each, full bot request with all tools, 2026-10-12):**
+
+| Model | Schema | Valid | Text `"null"` | Malformed JSON |
+|---|---|---|---|---|
+| Haiku 5.5 low | before (`anyOf`) | 0 | 48 | 0 |
+| Haiku 5.5 low | after (`type` list) | 48 | 0 | 0 |
+| Sonnet 5.5 medium | before | 9 | 39 | 0 |
+| Sonnet 5.5 medium | after | 45 | 0 | 3 |
+
+The three malformed ones were `{"cwd": , ...}`: Sonnet left the value out. Repeating that with more calls gave 1 of 60 at medium and 4 of 60 at low effort; the old schema gave 0 of 120 malformed. So the fix trades a large problem for a small one on Sonnet. Another way to avoid both would be to make the optional arguments truly optional (not required, `strict` off); in a quick test Haiku then sent `{"command": "echo hello"}` and nothing wrong. That changes the repository's rule that every tool is strict, so it was not done.
+
 ## Known limits
 
 - **Approve for the day approves everything** until midnight (#56, a serious weakness).
-- **A model passing the text `"null"` for an optional argument** (Haiku did it in the live run) makes the call fail validation, and **each failed call is asked about again**: one `echo` took three requests in the first live scenario (`timeout_seconds: "null"` was rejected, then `cwd: "null"`, then the right call). Nothing wrong runs, but the user is asked for calls that cannot run. Not fixed; see [`known-issues.md`](known-issues.md).
+- **A call with malformed JSON arguments is still asked about** (shown as an empty command; approving it returns an error to the model). About 6 percent of Sonnet calls after the schema change below, none seen on Haiku. See [`known-issues.md`](known-issues.md).
 - A restart loses a waiting turn (above). A reminder is protected by the plain-text copy.
 - If the update queue is busy for the whole 60 seconds the timer can fire before a waiting press is processed, and the press then says it is no longer valid.
 - The press handler runs the resumed turn inside the update, so while it runs no other chat is answered (same as any turn).
