@@ -153,15 +153,15 @@ def test_native_function_tools_are_strict_and_have_no_idle_message():
         assert function['strict'] is True and parameters['additionalProperties'] is False
         assert parameters['required'] == list(parameters['properties'])
         assert 'idle_message' not in parameters['properties']
-    assert [f['name'] for f in functions] == ['save_memory', 'recall_memory', 'forget_memory', 'set_reminder', 'list_reminders', 'cancel_reminder']
+    assert [f['name'] for f in functions] == ['save_memory', 'recall_memory', 'forget_memory', 'set_reminder', 'list_reminders', 'cancel_reminder', 'bash']
 
 
 def test_server_tools_come_after_function_tools_and_are_capped():
     from tools.native import registry as native_registry
 
     schemas = native_registry.schemas()
-    assert [s['type'] for s in schemas] == ['function'] * 6 + ['openrouter:web_search', 'openrouter:web_fetch']
-    search, fetch = schemas[6:]
+    assert [s['type'] for s in schemas] == ['function'] * 7 + ['openrouter:web_search', 'openrouter:web_fetch']
+    search, fetch = schemas[7:]
     assert search['parameters']['max_uses'] and search['parameters']['max_results'] and search['parameters']['max_characters']
     assert fetch['parameters']['max_uses'] and fetch['parameters']['max_content_tokens']
 
@@ -213,5 +213,5 @@ def test_system_prompt_lists_every_registered_tool():
 
     assert '{tools}' not in prompt
     assert native_registry.prompt_section() in prompt
-    for name in ('save_memory', 'recall_memory', 'forget_memory', 'set_reminder', 'list_reminders', 'cancel_reminder', 'web_search', 'web_fetch'):
+    for name in ('save_memory', 'recall_memory', 'forget_memory', 'set_reminder', 'list_reminders', 'cancel_reminder', 'bash', 'web_search', 'web_fetch'):
         assert name in prompt

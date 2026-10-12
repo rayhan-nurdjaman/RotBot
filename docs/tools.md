@@ -46,6 +46,7 @@ All schemas are strict (`"strict": true`, `"additionalProperties": false`, every
 | `set_reminder` | `description: string`, `when: string` (ISO 8601) | `{"id", "description", "when"}` (`when` echoed in the configured zone, e.g. `2026-10-12T09:30+08:00`); `ok: false` for text that is not ISO 8601 or a time not in the future | the chat's reminders |
 | `list_reminders` | none | `{"reminders": [{"id", "description", "when"}, ...]}`, this chat's waiting reminders, soonest first | the chat's reminders |
 | `cancel_reminder` | `id: integer` | `{"cancelled": <id>}`; `ok: false` if the chat has no waiting reminder with that id | the chat's reminders |
+| `bash` | `command: string` | `{"exit_code", "output", "truncated", "omitted_characters"}`; `ok: false` if the command ran longer than 20 seconds (it is killed) | **the machine itself, with no sandbox** (see below) |
 
 Plus two **server tools** run by OpenRouter (next section): `web_search` and `web_fetch`.
 
@@ -67,6 +68,28 @@ The memory tools do not record who saved a memory (`created_by` stays NULL), sam
 There is no `get_time` tool: the model reads the time from the timestamp on each user message (see [`caching-and-server-tools.md`](caching-and-server-tools.md)). The timezone is one global setting, `timezone` in `config/config.yaml` (default `Asia/Singapore`), read by `src/clock.py`.
 
 **`set_reminder`** parses `when` with `datetime.fromisoformat` (so `Z` and offsets like `+08:00` work). A string **without an offset is read in the configured timezone** (`clock.zone`); one with an offset keeps it. The moment is stored as Unix seconds in UTC, so DST and a later change of the `timezone` setting do not move it. A time that is not strictly in the future is rejected, and the error includes the current time so the model can retry. The reminder is stored with `chat_id`, the description, and `created_by` NULL (see [known-issues.md](known-issues.md)). **`list_reminders`** and **`cancel_reminder`** only ever see the calling chat's reminders; the id of another chat's reminder is reported as not found. Reminder logic is in `src/reminders.py`, the tools in `src/tools/native.py` are thin wrappers.
+
+### `bash`: a shell with no sandbox (added by the owner's decision, 2026-10-12)
+
+**What it does.** Runs `bash -c <command>` on the machine the bot runs on and returns the exit code and the output (stdout and stderr together). The owner knowingly chose to give the model unrestricted shell access.
+
+**What "no sandbox" means in practice, read before deploying:**
+- The command runs as **the user who started the bot**, in the bot's working directory (the repo root), with the **bot's environment**. That environment holds `OPENROUTER_API_KEY` and `TELEGRAM_API_KEY` (loaded from `.env` by `load_dotenv`). A command such as `env` or `cat .env` returns them **into the chat**. They also go to OpenRouter as part of the conversation history.
+- It can read, change and delete anything that user can, including `data/rotbot.db` (memories and reminders), the source, and files outside the repo. It has network access.
+- **There is no access control on the bot** (#35). Anyone who can message the bot, in a private chat or a group it is in, can ask the model to run commands, and `/model` and `/schizo` are open to them as well. The model's instructions to be careful are a request, not a guard.
+- **Prompt injection.** Text the model reads (a web page from `web_fetch`, a search result, a photo, a forwarded message) can contain instructions. The tool description tells the model not to follow them, but nothing enforces it.
+- Output goes into the conversation history and is re-sent on every request until trimmed, so a large output costs tokens repeatedly.
+
+**Limits that do exist (they limit accidents, not abuse).**
+- 20 seconds per command (`BASH_TIMEOUT_S`, kept below `tool_timeout_s` so the tool reports the stop itself). On timeout the **whole process group** is killed with `SIGKILL`, so programs the command started die too. Anything that must outlive 20 seconds cannot be run; a command that detaches itself (`setsid`, `nohup ... &` with a new session) can escape the kill.
+- No input: stdin is `/dev/null`, so a command that waits for input ends instead of hanging.
+- Output is cut at 8000 characters (`BASH_MAX_OUTPUT`); `truncated` and `omitted_characters` tell the model what was dropped.
+- A non-zero exit code is still `ok: true` (the model reads `exit_code`); `ok: false` is used only for the timeout.
+- Commands in one turn can run in parallel, because the model may call several tools at once and they are run together. They do not share a shell, a working directory or variables: each call is a new `bash -c`.
+
+**If this is deployed beyond the owner.** Do access control first (#35). A smaller step is to run the bot as a dedicated low-privilege user, or in a container, so that the environment and files it can reach are limited; this was **not done**. Removing the tool is deleting the `bash` function (and its constants) from `src/tools/native.py` and fixing the count in `tests/test_registry.py`; the cached prompt prefix changes once.
+
+**Verified:** `tests/test_bash.py` runs real commands (output, exit code, stderr, working directory, no stdin, truncation, binary output, timeout with a child process that must not survive). One live turn on Haiku 5.5 with Telegram faked: asked how many test files there are, it ran a shell command and answered correctly (15). Not tested: a hostile prompt, or behaviour under a group chat.
 
 ## Server tools (`web_search`, `web_fetch`)
 
@@ -112,7 +135,7 @@ Tools no longer take an `idle_message` and send nothing to the chat while they r
 2. That is all: the schema, dispatch and the system prompt list are generated. No `config/tools.json`, no `case`, no prompt edit.
 3. **Appending a tool changes the cached prefix once** (every chat's next request is a cache write). It is not a per-request cost, so it is fine to do at deploy time. Never add or remove tools *while the program runs*.
 4. Add tests in `tests/` with the LLM and network faked (see [`contributing.md`](contributing.md)). For a tool, call `registry.call(name, args, ToolContext(instance, fake_client))`.
-5. Do not make it slower than `tool_timeout_s` (30 s) without raising that value in `config/config.yaml`.
+5. Do not make it slower than `tool_timeout_s` (30 s) without raising that value in `config/config.yaml`. (`bash` stops itself at 20 s for this reason.)
 
 ## Retired tools
 

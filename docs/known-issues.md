@@ -2,6 +2,10 @@
 
 Everything here was **reproduced or read directly in the code** on commit `3d28d30` plus the reminder rewrite (items marked fixed since then are removed), unless marked *inferred*. Items are ordered by how likely they are to hurt. None of these are tracked as GitHub issues unless a number is given. If you fix one, delete it here.
 
+## Security (by decision, not a bug)
+
+- **The `bash` tool has no sandbox and the bot has no access control (#35).** Anyone who can message the bot can have the model run commands as the bot's user, and the bot's environment contains the OpenRouter and Telegram keys. The owner accepted this on 2026-10-12. Details and the limits that do exist are in [`tools.md`](tools.md#bash-a-shell-with-no-sandbox-added-by-the-owners-decision-2026-10-12). Do not add the bot to a group you do not trust, and do not share the bot's username.
+
 ## Bugs (wrong behaviour today)
 
 ### 1. Two quick messages in one chat make the second reply fail

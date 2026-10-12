@@ -55,7 +55,7 @@ What has been proven, and how. Use this to decide how much to trust a piece of b
 
 ## Covered by tests (Test)
 
-211 tests, see [`contributing.md`](contributing.md). They prove the logic given fakes: grouping and ordering of tool rounds, the step cap, every finish reason branch, each error mapping, tool timeouts, malformed arguments, the lock, trimming never leaving an orphan, chunked trimming, request ordering and breakpoint placement, no `temperature`, the typing task lifecycle, reasoning kept and dropped, the memory store and its limits, the reminder scheduler (ordering, wake-up, retry, restart, cancel) and its tools, command behaviour, the `llm_call` fields.
+221 tests, see [`contributing.md`](contributing.md). They prove the logic given fakes: grouping and ordering of tool rounds, the step cap, every finish reason branch, each error mapping, tool timeouts, malformed arguments, the lock, trimming never leaving an orphan, chunked trimming, request ordering and breakpoint placement, no `temperature`, the typing task lifecycle, reasoning kept and dropped, the memory store and its limits, the reminder scheduler (ordering, wake-up, retry, restart, cancel) and its tools, command behaviour, the `llm_call` fields.
 
 **Tests cannot prove** that Telegram, OpenRouter or the provider cache behave as assumed. That is what the Live list is for.
 
