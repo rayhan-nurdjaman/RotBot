@@ -63,6 +63,24 @@ def test_photo_without_caption_is_forwarded_with_image():
     assert calls == [(42, 'alice: ', b'jpegdata', False)]
 
 
+def test_the_largest_photo_size_is_downloaded():
+    photo = [
+        SimpleNamespace(file_id='small', width=90, height=60),
+        SimpleNamespace(file_id='medium', width=320, height=240),
+        SimpleNamespace(file_id='large', width=1280, height=960),
+    ]
+    asked = []
+
+    class RecordingBot(FakeBot):
+        async def get_file(self, file_id):
+            asked.append(file_id)
+            return await super().get_file(file_id)
+
+    run_on_message(make_update(photo=photo), bot=RecordingBot())
+
+    assert asked == ['large']
+
+
 def test_failed_photo_download_without_caption_is_ignored():
     photo = [SimpleNamespace(file_id='a', width=100, height=100)]
     assert run_on_message(make_update(photo=photo), bot=FakeBot(fail=True)) == []

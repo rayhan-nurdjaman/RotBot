@@ -27,7 +27,7 @@ Logs go to stdout and `app.log`. Stop with Ctrl-C. A bot token must exist (creat
 ## Tests
 
 ```sh
-env/bin/python -m pytest -q               # 202 tests, about 2 seconds, no network
+env/bin/python -m pytest -q               # 211 tests, about 2 seconds, no network
 env/bin/python -m pyflakes src tests      # expect exactly 2 pre-existing warnings in src/
 ```
 
@@ -47,7 +47,8 @@ Layout (`tests/`):
 | `test_reminders.py` | Reminder store and scheduler (fake clock, temp database): ordering, wake-up, late-on-startup, retry and `failed`, restart, cancel; the three tools (ISO parsing, offsets, DST, past times, chat scoping); `on_reminder` delivery and the lock |
 | `test_clock.py` | Timezone, `stamp()`, message timestamps |
 | `test_db.py` | `db.init`, migrations, failed migration, newer database refused |
-| `test_client.py` | Stickers and photo failures in `client.on_message` |
+| `test_client.py` | Stickers, photo failures and largest-size selection in `client.on_message` |
+| `test_images.py` | `encode_image` (JPEG passthrough, long-edge cap, no enlarging, PNG with transparency) and that no `detail` field is stored |
 | `test_main.py` | `get_instance`, personalities (new chat is `rotbot`, switching leaves nothing behind, a failed `/schizo` or a missing file changes nothing), always-on stub |
 
 ### How tests avoid the network and real state

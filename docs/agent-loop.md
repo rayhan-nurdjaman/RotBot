@@ -91,7 +91,26 @@ The returned tuples are `(tool_call_id, tool_name, arguments_dict, result)` in *
 
 ## Images
 
-`assistant.encode_image(bytes) -> str`: opens with Pillow, shrinks to fit within 512 by 512 (`thumbnail`, keeps aspect ratio), re-encodes as JPEG, and returns a `data:image/jpeg;base64,...` URL. Called by `main.on_message`. Messages with images are stored with `detail: "low"`. Bytes that are not a valid image raise from Pillow; that is not caught (inferred from the code, not tested).
+`assistant.encode_image(bytes) -> str`: opens with Pillow and returns a `data:image/jpeg;base64,...` URL. A JPEG whose long edge is at most `IMAGE_MAX_EDGE` (1568 px) is sent **byte for byte**, so it is not compressed a second time. Anything else (a larger image, or a PNG, WebP or other format) is converted to RGB, shrunk to fit 1568 px on the long edge with `thumbnail` (keeps the aspect ratio, never enlarges) and saved as JPEG at quality 95. Called by `main.on_message`. The stored image part is `{"type": "image_url", "image_url": {"url": ...}}` with **no `detail` field** (it did nothing on Claude). Bytes that are not a valid image raise from Pillow; that is not caught (inferred from the code, not tested).
+
+**Why 1568 (issue #42, decided 2026-10-12).** The goal is for the bot to read small text on whiteboard and poster photos and set reminders from it. Anthropic's standard tier scales anything above 1568 px on the long edge down anyway, so a larger image only costs more tokens (about 4800 for 2560 px against about 2400 for 1568 px) for nothing. 512 px is far below that and was chosen for cost, not quality. A JPEG that already fits is passed through untouched because Anthropic warns that repeated lossy compression is what makes text unreadable. `client._handle_image` now downloads the largest Telegram size and leaves the capping to `encode_image`.
+
+**What the poster test does and does not show.** Haiku 5.5 and Sonnet 5.5 were given a synthetic 2560 by 1920 poster with 12 times in 48, 30 and 20 px type (lightly blurred) and asked to list every HH:MM they could read, 2 runs each, with a large enough `max_tokens` (4000):
+
+| Long edge sent | Prompt tokens | Haiku 5.5 cost | Sonnet 5.5 cost | Times read correctly (of 12) | Completion tokens (Haiku, Sonnet) |
+|---|---|---|---|---|---|
+| 512 (the old behaviour) | 315 | $0.00013 | $0.0026 | 12 and 12 (Haiku); 12 and 11 plus 1 invented (Sonnet) | 479-589, about 345 |
+| 768 | 637 | | | 12 (all runs) | 185-239, 60 |
+| 1280 | 1659 | $0.00020 | $0.0039 | 12 (all runs) | 60 |
+| 1568 (chosen) | 2401 | $0.00027 | $0.0054 | 12 (all runs) | 60 to 240 |
+
+**Honest reading: this test is too easy to prove that 1568 is needed.** Even the old 512 size read the poster in most runs. The visible differences are that at 512 the models had to think much harder (several times more output tokens, which are billed) and that Sonnet once missed a time and invented one. A synthetic poster in a clean font is much easier than a real photograph (glare, angle, handwriting, small print). The 1568 setting is therefore a judgement from the provider's own limits and Anthropic's compression advice, **not a measured requirement**. The first version of this section claimed 512 read none of the times; that was a measurement mistake (the reply budget was used up by reasoning, so the reply text came back empty) and has been corrected.
+
+**If real photos prove hard to read,** raise `IMAGE_MAX_EDGE`, but the provider scales anything above 1568 px (standard tier) down regardless. The cost is paid on every request while the image stays in the history.
+
+**End to end check (real `encode_image` and the real request, Telegram not involved):** a 4000 by 3000 poster photo was shrunk and sent, and the model read the shuttle time (07:55) correctly, computed the reminder time and noticed that 7 Nov 2026 is a Saturday, not a Friday as the poster says. The cache breakpoint sat on the image part.
+
+**Earlier measurement of the old behaviour (checked 2026-10-12).** The photo used to be resampled twice before the model saw it (a Telegram size chosen by `client._handle_image`, then 512 by 512 at JPEG quality 75). OpenRouter's page "Image Inputs" accepts `image/png`, `image/jpeg`, `image/webp` and `image/gif` as data URLs or links and gives no size limit of its own; Anthropic's vision page lists 10 MB per image (base64) and 8000 by 8000 px. On a simple test image with one line of text, Haiku and Sonnet read it correctly even at 512, and `detail: "low"` made no difference on Claude. Token counts on that image: 512 by 384 gave 291 prompt tokens, 1280 by 960 gave 1635, and 2560 by 1920 or larger gave 4765. PNG and lossless WebP cost the same tokens as JPEG at the same size.
 
 ## Logging
 

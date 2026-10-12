@@ -35,7 +35,7 @@ All follow the OpenAI Chat Completions format.
 ```json
 {"role": "user", "content": [
   {"type": "text", "text": "alice: what colour is this?"},
-  {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,...", "detail": "low"}}
+  {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,..."}}
 ]}
 ```
 

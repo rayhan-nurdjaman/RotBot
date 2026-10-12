@@ -64,7 +64,7 @@ A new `Instance` starts as `rotbot` (`Instance.__init__` calls `set_personality(
 
 `/schizo <name>` (via `main.set_instance_personality`) calls `set_personality(name)`. It does **not** clear the conversation history. Earlier messages written in the old persona stay in the context and can influence the new one (few-shot contamination; the README TODO mentions compaction as a future idea). On an unknown name it replies `The personality '<name>' does not exist.` and the chat **keeps the persona it had**.
 
-The system prompt text itself contains: identity and role (RotBot, username `rotrot_botbot`, replies in group chats formatted as `<username>: <message>`), brevity and Markdown guidance, a source-citing format, a capabilities list (vision at 512 by 512), a `# Tools` section, a `# Time` section (explains the `[date time]` stamp on each user message, with the `{timezone}` placeholder filled from `config.yaml`), and a memory paragraph pointing to the `API: Memory` message that follows the system prompt. The `# Tools` section is the placeholder `{tools}` in `base.yaml`, replaced in `Instance.get_system_prompt` by the list generated from the tool registry (see [`tools.md`](tools.md)). Nothing to update by hand when a tool changes.
+The system prompt text itself contains: identity and role (RotBot, username `rotrot_botbot`, replies in group chats formatted as `<username>: <message>`), brevity and Markdown guidance, a source-citing format, a capabilities list (vision, including small text on posters; images over 1568 px are scaled down), a `# Tools` section, a `# Time` section (explains the `[date time]` stamp on each user message, with the `{timezone}` placeholder filled from `config.yaml`), and a memory paragraph pointing to the `API: Memory` message that follows the system prompt. The `# Tools` section is the placeholder `{tools}` in `base.yaml`, replaced in `Instance.get_system_prompt` by the list generated from the tool registry (see [`tools.md`](tools.md)). Nothing to update by hand when a tool changes.
 
 ## Tool schemas
 
@@ -76,7 +76,8 @@ Registered in `client.py` for every chat. Each runs only the first matching hand
 
 | Command | Arguments | Effect |
 |---|---|---|
-| `/schizo` | `<personality>` | Switch persona (base plus the persona; an unknown name changes nothing). No argument: `Usage: /schizo <personality>`. |
+| `/help` | none | List all commands with a one-line description (`main.HELP_TEXT`, keep it in sync when adding a command; a test checks it). |
+| `/schizo` | `[<personality>]` | Switch persona (base plus the persona; an unknown name changes nothing). No argument: shows the chat's current persona and lists every key in `index.yaml`, changing nothing. |
 | `/stfu` | none | Toggle always-on. When off, messages are recorded but not answered. Adds an `API: Always On is now enabled/disabled...` user message to the context and replies `Always On is now Enabled/Disabled`. |
 | `/model` | `[<model>[-<effort>]]` | See [`models-and-openrouter.md`](models-and-openrouter.md). |
 | `/autoroute` | none | Toggle auto routing. |

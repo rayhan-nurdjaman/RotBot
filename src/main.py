@@ -19,7 +19,7 @@ load_dotenv()
 import client as Client
 import assistant as Assistant
 import always_on as AlwaysOn
-from instance import Instance
+from instance import Instance, personality_index
 from models import parse_model, EFFORTS, MODELS
 
 import db
@@ -92,6 +92,10 @@ async def on_message(instance_id, text, images=None, no_response=False):
 # Commands, should somehow make a pipeline for defining them, maybe decorators?
 async def set_instance_personality(instance_id, key):
 	instance = get_instance(instance_id)
+	if not key:
+		names = ', '.join(personality_index)
+		await Client.send_message(instance.unique_id, f'_Current personality: \'{instance.personality}\'. Available: {names}. Use /schizo <personality> to switch._')
+		return
 	try:
 		instance.set_personality(key)
 		await Client.send_message(instance.unique_id, f'_Succesfully swapped personality to \'{key}\'_')
@@ -152,9 +156,25 @@ async def forget_memory(instance_id, text):
 	else:
 		await Client.send_message(instance_id, f'_There is no memory {memory_id} in this chat._')
 
+# Keep in sync with the commands registered in client.py.
+HELP_TEXT = (
+	'Commands:\n'
+	'/help - show this list\n'
+	'/model <model>-<effort> - set the model and reasoning effort, e.g. /model haiku-5.5-high. The effort is optional. With no argument it shows the current model\n'
+	'/autoroute - toggle automatic model selection (overrides /model)\n'
+	'/schizo [<personality>] - switch the personality of this chat. With no argument it lists the available ones\n'
+	'/stfu - toggle always-on replies\n'
+	'/memory - list what is saved in memory for this chat\n'
+	'/forget <id> - delete one memory, the id is shown by /memory'
+)
+
+async def show_help(instance_id):
+	await Client.send_message(instance_id, HELP_TEXT)
+
 # Entry point
 async def main():
 	# Client callbacks
+	Client.show_help_callback					= show_help
 	Client.on_message_callback					= on_message
 	Client.set_instance_personality_callback	= set_instance_personality
 	Client.toggle_always_on_callback			= toggle_always_on

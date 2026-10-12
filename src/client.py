@@ -28,18 +28,11 @@ set_instance_model_callback			= None
 toggle_auto_route_callback			= None
 list_memories_callback				= None
 forget_memory_callback				= None
+show_help_callback					= None
 
 async def _handle_image(update, context):
-	image_max_res = 512
+	# Telegram lists the sizes of a photo from smallest to largest. Take the largest, assistant.encode_image caps it.
 	chosen_photo = update.message.photo[-1]
-	for photo_size in update.message.photo[-2::-1]:
-		width = photo_size.width
-		height = photo_size.height
-		min_res = min(width, height)
-		if min_res > image_max_res:
-			chosen_photo = photo_size
-		else:
-			break
 
 	try:
 		file = await context.bot.get_file(chosen_photo.file_id)
@@ -150,10 +143,7 @@ async def on_message(update, context):
 
 # Commands
 async def schizo(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
-	try:
-		await set_instance_personality_callback(update.message.chat.id, context.args[0].lower())
-	except IndexError:
-		await send_client_message(update.message.chat.id, 'Usage: /schizo <personality>')
+	await set_instance_personality_callback(update.message.chat.id, context.args[0].lower() if context.args else '')
 
 async def toggle_always_on(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
 	await toggle_always_on_callback(update.message.chat.id)
@@ -170,9 +160,13 @@ async def memory(update: telegram.Update, context: telegram.ext.ContextTypes.DEF
 async def forget(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
 	await forget_memory_callback(update.message.chat.id, ' '.join(context.args))
 
+async def help(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
+	await show_help_callback(update.message.chat.id)
+
 # TODO(/usage): not implemented yet, see https://github.com/rayhan-nurdjaman/RotBot/issues/31
 # Any member of a chat can run it, and it shows only that chat's own usage and spend.
 
+application.add_handler(telegram.ext.CommandHandler('help', help))
 application.add_handler(telegram.ext.CommandHandler('stfu', toggle_always_on))
 application.add_handler(telegram.ext.CommandHandler('model', model))
 application.add_handler(telegram.ext.CommandHandler('autoroute', autoroute))

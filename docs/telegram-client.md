@@ -36,7 +36,7 @@ Behaviour, in order:
 6. **Photo.** If the message has a photo: pick a size (see below) and download it into memory. On `TelegramError` the failure is logged and the message continues as text only; if there is no text either, it is ignored.
 7. Calls `on_message_callback(chat_id, "<username>: <reply prefix><text>", image_bytes_or_None, no_response=False)`.
 
-Photo size selection: starts from the largest, then walks to smaller sizes while the **shorter side** is above 512 px, taking the last one that still exceeded 512. The result is later shrunk again by `assistant.encode_image` to fit 512 by 512 JPEG. Albums (several photos sent together) arrive as separate updates, one photo each; each triggers its own reply. Documents sent as files (not photos) and animated stickers are ignored. A caption on a non-photo (for example a video caption) is treated as text. There is no handling for message length: a very long incoming text is passed to the model as is.
+Photo size selection: always the **largest** size Telegram offers (`message.photo[-1]`). `assistant.encode_image` then caps it at 1568 px on the long edge (a JPEG that already fits is passed through untouched). Albums (several photos sent together) arrive as separate updates, one photo each; each triggers its own reply. Documents sent as files (not photos) and animated stickers are ignored. A caption on a non-photo (for example a video caption) is treated as text. There is no handling for message length: a very long incoming text is passed to the model as is.
 
 ## Outgoing messages
 
@@ -58,10 +58,11 @@ Handlers in `client.py` only forward to callbacks; the logic is in `main.py`.
 
 | Command | Handler | Callback in `main` | Arguments |
 |---|---|---|---|
+| `/help` | `help` | `show_help(chat_id)` | none; sends `main.HELP_TEXT` |
 | `/stfu` | `toggle_always_on` | `toggle_always_on(chat_id)` | none |
 | `/model` | `model` | `set_instance_model(chat_id, text)` | all arguments joined with spaces |
 | `/autoroute` | `autoroute` | `toggle_auto_route(chat_id)` | none |
-| `/schizo` | `schizo` | `set_instance_personality(chat_id, key)` | first argument, lowercased; none gives a usage message |
+| `/schizo` | `schizo` | `set_instance_personality(chat_id, key)` | first argument, lowercased; none passes an empty key and `main` lists the available personalities |
 | `/memory` | `memory` | `list_memories(chat_id)` | none |
 | `/forget` | `forget` | `forget_memory(chat_id, text)` | all arguments joined with spaces; `main` parses an integer id |
 

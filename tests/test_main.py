@@ -36,6 +36,51 @@ def test_unknown_personality_reports_does_not_exist(monkeypatch):
     assert sent == ["_The personality 'alien' does not exist._"]
 
 
+def test_help_lists_every_registered_command(monkeypatch):
+    import re
+    import client
+
+    sent = []
+
+    async def send_message(chat_id, message):
+        sent.append((chat_id, message))
+
+    monkeypatch.setattr(main.Client, 'send_message', send_message)
+    registered = {
+        command
+        for handler in client.application.handlers[0]
+        if isinstance(handler, client.telegram.ext.CommandHandler)
+        for command in handler.commands
+    }
+
+    asyncio.run(main.show_help('chat-1'))
+
+    assert registered
+    assert set(re.findall(r'^/(\w+)', sent[0][1], re.M)) == registered
+    assert sent[0][0] == 'chat-1'
+
+
+def test_schizo_without_an_argument_lists_personalities_and_changes_nothing(monkeypatch):
+    sent = []
+
+    async def send_message(chat_id, message):
+        sent.append(message)
+
+    monkeypatch.setattr(main.Client, 'send_message', send_message)
+    monkeypatch.setattr(main, 'instances', {})
+    instance = main.get_instance('chat-1')
+    instance.set_personality('british')
+    before = snapshot(instance)
+
+    asyncio.run(main.set_instance_personality('chat-1', ''))
+
+    assert snapshot(instance) == before
+    assert len(sent) == 1
+    assert "'british'" in sent[0]
+    for key in main.personality_index:
+        assert key in sent[0]
+
+
 def test_should_respond_always_true():
     assert asyncio.run(main.AlwaysOn.should_respond([])) is True
 

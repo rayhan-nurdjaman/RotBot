@@ -120,8 +120,7 @@ class Instance:
 				{
 					'type': 'image_url',
 					'image_url': {
-						'url': image_url,
-						"detail": "low"
+						'url': image_url
 					}
 				}
 			)

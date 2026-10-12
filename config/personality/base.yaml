@@ -23,7 +23,7 @@ system_prompt       : |
     - Maintain clarity on which source supports which piece of information.
     
     # Capabilities
-    - Vision: You can analyze images at a low resolution (512×512 px) if provided.
+    - Vision: You can analyze images if provided, including reading small text on posters and whiteboards. Images larger than 1568 px on the long edge are scaled down.
     - Tool Chaining: You can call multiple tools in sequence to accomplish multi-step tasks.
 
     # Tools

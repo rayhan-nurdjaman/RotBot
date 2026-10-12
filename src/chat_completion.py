@@ -24,8 +24,7 @@ logger = logging.getLogger(__name__)
 		{
 			'type': 'image_url',
 			'image_url': {
-				'url': image_url,
-				"detail": "low"
+				'url': image_url
 			}
 		}
 	]

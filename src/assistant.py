@@ -114,20 +114,23 @@ def _finish(instance, response):
 		return REFUSAL_MESSAGE
 	return FALLBACK_MESSAGE
 
+# Long edge in pixels. Enough to read small print on posters and whiteboards (see docs/agent-loop.md, issue #42).
+IMAGE_MAX_EDGE = 1568
+
 def encode_image(data):
-	image_max_res = 512
 	with Image.open(io.BytesIO(data)) as img:
-		new_size = (image_max_res, image_max_res)
+		# A JPEG that already fits is sent as it is, so it is not compressed a second time.
+		if img.format == 'JPEG' and max(img.size) <= IMAGE_MAX_EDGE:
+			sent_data = data
+		else:
+			resized = img.convert('RGB')
+			resized.thumbnail((IMAGE_MAX_EDGE, IMAGE_MAX_EDGE), Image.Resampling.LANCZOS)
 
-		img.thumbnail(new_size, Image.Resampling.LANCZOS)
+			buffer = io.BytesIO()
+			resized.save(buffer, format='JPEG', quality=95)
+			sent_data = buffer.getvalue()
 
-		buffer = io.BytesIO()
-		img.save(buffer, format='JPEG')
-		buffer.seek(0)
-		
-		resized_data = buffer.read()
-
-	encoded_image = base64.b64encode(resized_data).decode('utf-8')
+	encoded_image = base64.b64encode(sent_data).decode('utf-8')
 	return f'data:image/jpeg;base64,{encoded_image}'
 
 logger.info('Assistant object initialized.')
