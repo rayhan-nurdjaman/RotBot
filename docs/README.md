@@ -26,6 +26,7 @@ If you are an agent or a new contributor, read in this order:
 | **Why can nothing come after the history? Why is the time stamped into messages?** (silent cache failure with server tools) | [`caching-and-server-tools.md`](caching-and-server-tools.md) |
 | How does the agent loop work? What happens on errors, timeouts, odd finish reasons? | [`agent-loop.md`](agent-loop.md) |
 | How do I add or change a tool? What tools exist and what do they return? | [`tools.md`](tools.md) |
+| Who can use the bot? Where can the shell tool run? How do I add a friend? | [`access-control.md`](access-control.md) |
 | How do models, efforts, `/model` and `/autoroute` work? What does the OpenRouter request look like? | [`models-and-openrouter.md`](models-and-openrouter.md) |
 | What does config file X contain? What are the env vars, commands, personalities? | [`configuration.md`](configuration.md) |
 | What is the Telegram client's behaviour, and what are its limits? | [`telegram-client.md`](telegram-client.md) |

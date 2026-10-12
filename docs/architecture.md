@@ -6,6 +6,7 @@ All code is in `src/`. Modules import each other by bare name (`import client as
 
 | File | Responsibility | Imports (internal) |
 |---|---|---|
+| `src/access.py` | The allow-list (`ALLOWED_USER_IDS`) and the chats where `bash` may run (`OP_CHAT_IDS`), read from the environment by `load()`. Denies everybody until `load()` has run. | none |
 | `src/main.py` | Entry point, composition, and all chat-level logic: instance registry, message and reminder handlers, command handlers, startup and shutdown of the database and the reminder scheduler. | `client`, `assistant`, `always_on`, `instance`, `models`, `db`, `reminders` |
 | `src/client.py` | Everything Telegram: receives updates, sends messages, typing indicator, registers handlers. Calls back into `main` through module-level callback variables. **Builds the Telegram `Application` at import time**, so `TELEGRAM_API_KEY` must be set before importing it. | none |
 | `src/assistant.py` | The agent loop: calls the model, runs tools, stores tool rounds, handles errors and finish reasons. Also `encode_image`. | `chat_completion`, `config`, `router`, `client`, `tools.native`, `tools.registry` |
@@ -63,7 +64,7 @@ Two things to notice:
 1. `main.py` configures logging (to `app.log` and stdout).
 2. `load_dotenv()` reads `.env`.
 3. Imports run. **Importing `client` creates the Telegram `Application` immediately**, which raises `telegram.error.InvalidToken` if `TELEGRAM_API_KEY` is missing or empty. Importing `chat_completion` creates the OpenAI client pointed at OpenRouter. Importing `tools.native` registers the tools, and `assistant` builds the tool list from the registry. Importing `instance` reads `config/personality/index.yaml`.
-4. `main()` assigns the five callbacks on `client`, opens the database (`db.init()`, which creates `data/rotbot.db` and applies migrations), then `Client.init()` starts polling Telegram.
+4. `main()` first calls `access.load()` (it raises and stops the bot if `ALLOWED_USER_IDS` is empty or invalid), then assigns the callbacks on `client`, opens the database (`db.init()`, which creates `data/rotbot.db` and applies migrations), then `Client.init()` starts polling Telegram.
 5. The reminder scheduler task (`reminders.run(on_reminder)`) starts and runs forever. Reminders that came due while the bot was down are delivered first.
 6. On exit, the scheduler is cancelled, then `Client.shutdown()`, then `db.close()`.
 

@@ -10,15 +10,20 @@
 - Tests set a dummy token in `tests/conftest.py` and **replace `client.application` or its methods** instead of connecting.
 - PTB's bot object is frozen: you cannot assign to `client.application.bot.send_message`. Replace `client.application` with a stand-in object (`SimpleNamespace(bot=...)`) in tests.
 
-## Handlers (registered in this order, all in group 0)
+## Handlers
 
-1. `CommandHandler('stfu', ...)`
-2. `CommandHandler('model', ...)`
-3. `CommandHandler('autoroute', ...)`
-4. `CommandHandler('schizo', ...)`
-5. `CommandHandler('memory', ...)`
-6. `CommandHandler('forget', ...)`
-7. `MessageHandler(filters.ALL, on_message)`
+**Group -1, runs first: the access gate** `TypeHandler(Update, gate)`. If the sender's user id is not in `ALLOWED_USER_IDS` (or there is no sender at all), it logs one WARNING with the user id and chat id (never the message text) and raises `ApplicationHandlerStop`, so no later handler runs: no reply, nothing stored. Every update type is covered (messages, edits, channel posts). See [`access-control.md`](access-control.md).
+
+**Group 0, in this order:**
+
+1. `CommandHandler('help', ...)`
+2. `CommandHandler('stfu', ...)`
+3. `CommandHandler('model', ...)`
+4. `CommandHandler('autoroute', ...)`
+5. `CommandHandler('schizo', ...)`
+6. `CommandHandler('memory', ...)`
+7. `CommandHandler('forget', ...)`
+8. `MessageHandler(filters.ALL, on_message)`
 
 PTB runs **only the first matching handler per group**. A command message matches both its command handler and the catch-all; the command handler wins because it is registered first. **Keep the catch-all last.** A slash command that is not registered (including a command addressed to another bot, `/stfu@other_bot`, and removed ones like `/aura`) is handled by the catch-all as **ordinary text**, so the bot may reply to it with the model. (Verified by matching real `Update` objects.)
 

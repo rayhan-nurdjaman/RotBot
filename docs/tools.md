@@ -46,7 +46,7 @@ All schemas are strict (`"strict": true`, `"additionalProperties": false`, every
 | `set_reminder` | `description: string`, `when: string` (ISO 8601) | `{"id", "description", "when"}` (`when` echoed in the configured zone, e.g. `2026-10-12T09:30+08:00`); `ok: false` for text that is not ISO 8601 or a time not in the future | the chat's reminders |
 | `list_reminders` | none | `{"reminders": [{"id", "description", "when"}, ...]}`, this chat's waiting reminders, soonest first | the chat's reminders |
 | `cancel_reminder` | `id: integer` | `{"cancelled": <id>}`; `ok: false` if the chat has no waiting reminder with that id | the chat's reminders |
-| `bash` | `command: string` | `{"exit_code", "output", "truncated", "omitted_characters"}`; `ok: false` if the command ran longer than 20 seconds (it is killed) | **the machine itself, with no sandbox** (see below) |
+| `bash` | `command: string` | `{"exit_code", "output", "truncated", "omitted_characters"}`; `ok: false` if the chat is not in `OP_CHAT_IDS` (nothing runs) or the command ran longer than 20 seconds (it is killed) | **the machine itself, with no sandbox**, and only in chats listed in `OP_CHAT_IDS` (see below) |
 
 Plus two **server tools** run by OpenRouter (next section): `web_search` and `web_fetch`.
 
@@ -76,7 +76,7 @@ There is no `get_time` tool: the model reads the time from the timestamp on each
 **What "no sandbox" means in practice, read before deploying:**
 - The command runs as **the user who started the bot**, in the bot's working directory (the repo root), with the **bot's environment**. That environment holds `OPENROUTER_API_KEY` and `TELEGRAM_API_KEY` (loaded from `.env` by `load_dotenv`). A command such as `env` or `cat .env` returns them **into the chat**. They also go to OpenRouter as part of the conversation history.
 - It can read, change and delete anything that user can, including `data/rotbot.db` (memories and reminders), the source, and files outside the repo. It has network access.
-- **There is no access control on the bot** (#35). Anyone who can message the bot, in a private chat or a group it is in, can ask the model to run commands, and `/model` and `/schizo` are open to them as well. The model's instructions to be careful are a request, not a guard.
+- **Access control limits who can ask** (#35, [`access-control.md`](access-control.md)): the tool refuses to run unless the chat id is in `OP_CHAT_IDS`, and the bot ignores anyone not in `ALLOWED_USER_IDS`. In a private chat the chat id equals the user id, so listing only your own id gives you the shell and nobody else. In a **group**, every allowed user in it can ask the model to run commands, so list a group only if all its allowed members are trusted with your keys. The model's instructions to be careful are a request, not a guard.
 - **Prompt injection.** Text the model reads (a web page from `web_fetch`, a search result, a photo, a forwarded message) can contain instructions. The tool description tells the model not to follow them, but nothing enforces it.
 - Output goes into the conversation history and is re-sent on every request until trimmed, so a large output costs tokens repeatedly.
 
@@ -87,7 +87,7 @@ There is no `get_time` tool: the model reads the time from the timestamp on each
 - A non-zero exit code is still `ok: true` (the model reads `exit_code`); `ok: false` is used only for the timeout.
 - Commands in one turn can run in parallel, because the model may call several tools at once and they are run together. They do not share a shell, a working directory or variables: each call is a new `bash -c`.
 
-**If this is deployed beyond the owner.** Do access control first (#35). A smaller step is to run the bot as a dedicated low-privilege user, or in a container, so that the environment and files it can reach are limited; this was **not done**. Removing the tool is deleting the `bash` function (and its constants) from `src/tools/native.py` and fixing the count in `tests/test_registry.py`; the cached prompt prefix changes once.
+**If this is deployed beyond the owner.** Keep `OP_CHAT_IDS` to your own private chat. A further step is to run the bot as a dedicated low-privilege user, or in a container, so that the environment and files it can reach are limited; this was **not done**. Removing the tool is deleting the `bash` function (and its constants) from `src/tools/native.py` and fixing the count in `tests/test_registry.py`; the cached prompt prefix changes once.
 
 **Verified:** `tests/test_bash.py` runs real commands (output, exit code, stderr, working directory, no stdin, truncation, binary output, timeout with a child process that must not survive). One live turn on Haiku 5.5 with Telegram faked: asked how many test files there are, it ran a shell command and answered correctly (15). Not tested: a hostile prompt, or behaviour under a group chat.
 

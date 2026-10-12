@@ -6,14 +6,16 @@ All paths are relative to the repository root, which must be the working directo
 
 ## Environment variables (`.env`)
 
-Loaded by `load_dotenv()` in `main.py` before the modules that need them are imported. `.env` is gitignored. `.env.example` lists the two required ones.
+Loaded by `load_dotenv()` in `main.py` before the modules that need them are imported. `.env` is gitignored. `.env.example` lists the four below.
 
 | Variable | Required | Used by | If missing or wrong |
 |---|---|---|---|
 | `TELEGRAM_API_KEY` | **yes** | `client.py` (at import) | Import raises `telegram.error.InvalidToken`. A well-formed but wrong token starts, then fails with `InvalidToken: Unauthorized`; the extra `RuntimeError: This Updater is not running!` after it is a side effect, ignore it. |
+| `ALLOWED_USER_IDS` | **yes** | `access.py`, read by `main.main()` at startup | Empty, missing, or containing anything that is not a positive number (a username, a group id): **the bot refuses to start** with a message saying which. Comma separated numeric Telegram **user** ids. See [`access-control.md`](access-control.md). |
+| `OP_CHAT_IDS` | no | `access.py` | Empty or missing: the `bash` tool is off in every chat. Comma separated numeric chat ids (a group id is negative; in a private chat the chat id equals the user id). A bad entry stops the bot at startup. |
 | `OPENROUTER_API_KEY` | **yes** | `chat_completion.py` (at import) | Unset: import raises `OpenAIError`. Empty or wrong: every LLM call fails (HTTP 401) and users see "Something went wrong with that request." |
 
-`GOOGLE_API_KEY` and `GOOGLE_SEARCH_ENGINE_ID` are no longer used: web search runs on OpenRouter, billed to the same key. `OPENAI_API_KEY` is no longer read by anything in `src/` (only by retired code in `unused/`). `OPS` (an admin list for the removed `/sql` command) is also unused now.
+`GOOGLE_API_KEY` and `GOOGLE_SEARCH_ENGINE_ID` are no longer used: web search runs on OpenRouter, billed to the same key. `OPENAI_API_KEY` is no longer read by anything in `src/` (only by retired code in `unused/`). `OPS` (an admin list of usernames for the removed `/sql` command) is not used; `ALLOWED_USER_IDS` and `OP_CHAT_IDS` replace the idea, with numeric ids instead of usernames.
 
 ## `config/config.yaml`
 

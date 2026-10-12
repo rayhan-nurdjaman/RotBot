@@ -1,15 +1,41 @@
 import asyncio
 import os
 import time
+from types import SimpleNamespace
 
+import pytest
+
+import access as Access
 import assistant as Assistant
 from tools import native
 from tools.native import registry
 from tools.registry import ToolContext
 
+OP_CHAT = 7
 
-def call(command):
-    return asyncio.run(registry.call('bash', {'command': command}, ToolContext(instance=None, client=None)))
+
+@pytest.fixture(autouse=True)
+def op_chat(monkeypatch):
+    monkeypatch.setattr(Access, '_op_chats', frozenset({OP_CHAT}))
+
+
+def call(command, chat_id=OP_CHAT):
+    return asyncio.run(registry.call('bash', {'command': command}, ToolContext(instance=SimpleNamespace(unique_id=chat_id), client=None)))
+
+
+def test_it_does_nothing_in_a_chat_that_is_not_enabled(tmp_path):
+    marker = tmp_path / 'ran'
+
+    result = call(f'touch {marker}', chat_id=8)
+
+    assert result == {'ok': False, 'error': 'The bash tool is not enabled in this chat.'}
+    assert not marker.exists()
+
+
+def test_it_is_off_everywhere_when_no_chat_is_enabled(monkeypatch):
+    monkeypatch.setattr(Access, '_op_chats', frozenset())
+
+    assert call('echo hi')['ok'] is False
 
 
 def test_it_returns_the_output_and_exit_code():

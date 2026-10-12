@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import access as Access
 import client as Client
 import assistant as Assistant
 import always_on as AlwaysOn
@@ -173,6 +174,9 @@ async def show_help(instance_id):
 
 # Entry point
 async def main():
+	# First, so a missing or invalid allow-list stops the bot before anything is started.
+	Access.load()
+
 	# Client callbacks
 	Client.show_help_callback					= show_help
 	Client.on_message_callback					= on_message

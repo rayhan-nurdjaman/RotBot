@@ -27,7 +27,7 @@ Logs go to stdout and `app.log`. Stop with Ctrl-C. A bot token must exist (creat
 ## Tests
 
 ```sh
-env/bin/python -m pytest -q               # 221 tests, about 2 seconds, no network
+env/bin/python -m pytest -q               # 246 tests, about 2 seconds, no network
 env/bin/python -m pyflakes src tests      # expect exactly 2 pre-existing warnings in src/
 ```
 
@@ -48,7 +48,8 @@ Layout (`tests/`):
 | `test_clock.py` | Timezone, `stamp()`, message timestamps |
 | `test_db.py` | `db.init`, migrations, failed migration, newer database refused |
 | `test_client.py` | Stickers, photo failures and largest-size selection in `client.on_message` |
-| `test_bash.py` | The `bash` tool with real commands: output, exit code, stderr, working directory, no stdin, truncation, binary output, timeout kills child processes |
+| `test_access.py` | The lists (parsing, bad entries, empty, fail closed), the refusal to start, and the gate: real `telegram.Update` objects through PTB's own dispatcher with Telegram's network blocked, strangers reach no handler, an allowed user does |
+| `test_bash.py` | The `bash` tool with real commands, and that it does nothing outside `OP_CHAT_IDS`: output, exit code, stderr, working directory, no stdin, truncation, binary output, timeout kills child processes |
 | `test_images.py` | `encode_image` (JPEG passthrough, long-edge cap, no enlarging, PNG with transparency) and that no `detail` field is stored |
 | `test_main.py` | `get_instance`, personalities (new chat is `rotbot`, switching leaves nothing behind, a failed `/schizo` or a missing file changes nothing), always-on stub |
 

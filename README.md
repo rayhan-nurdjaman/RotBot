@@ -10,7 +10,7 @@ This project consists of a couple of modules
 Full documentation for humans and agents is in [`docs/`](docs/README.md). Start with [`docs/concepts.md`](docs/concepts.md) and [`docs/architecture.md`](docs/architecture.md); known bugs are in [`docs/known-issues.md`](docs/known-issues.md).
 
 # Setup
-Copy `.env.example` to `.env` and fill in `TELEGRAM_API_KEY` and `OPENROUTER_API_KEY`. Also set a hard spend limit on the OpenRouter key in the OpenRouter dashboard, as a safety net the bot cannot bypass.
+Copy `.env.example` to `.env` and fill in `TELEGRAM_API_KEY`, `OPENROUTER_API_KEY` and `ALLOWED_USER_IDS` (numeric Telegram user ids of the people who may use the bot; the bot will not start without it). Set `OP_CHAT_IDS` only for chats where the model may run shell commands. Also set a hard spend limit on the OpenRouter key in the OpenRouter dashboard, as a safety net the bot cannot bypass.
 
 # Models
 `/model <model>[-<effort>]` picks the model and reasoning effort together for a chat, e.g. `/model haiku-5.5-high`. Models: `haiku-5.5`, `sonnet-5.5`, `opus-5.5`. Efforts: `low`, `medium`, `high`, `xhigh`, `max`. The default is the cheapest, `haiku-5.5-low`; with no effort given it uses `low`. `/model` alone shows the current one.

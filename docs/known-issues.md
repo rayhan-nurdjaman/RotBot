@@ -4,7 +4,7 @@ Everything here was **reproduced or read directly in the code** on commit `3d28d
 
 ## Security (by decision, not a bug)
 
-- **The `bash` tool has no sandbox and the bot has no access control (#35).** Anyone who can message the bot can have the model run commands as the bot's user, and the bot's environment contains the OpenRouter and Telegram keys. The owner accepted this on 2026-10-12. Details and the limits that do exist are in [`tools.md`](tools.md#bash-a-shell-with-no-sandbox-added-by-the-owners-decision-2026-10-12). Do not add the bot to a group you do not trust, and do not share the bot's username.
+- **The `bash` tool has no sandbox.** The model can run commands as the bot's user, and the bot's environment contains the OpenRouter and Telegram keys. The owner accepted this on 2026-10-12. Two things now limit who can reach it (#35, see [`access-control.md`](access-control.md)): only user ids in `ALLOWED_USER_IDS` can use the bot at all, and the tool only runs in chats listed in `OP_CHAT_IDS`. Anyone who is allowed **in an op chat** still has a shell with your keys, and so does anything the model is tricked into doing there. Details and the limits on the tool itself are in [`tools.md`](tools.md#bash-a-shell-with-no-sandbox-added-by-the-owners-decision-2026-10-12).
 
 ## Bugs (wrong behaviour today)
 
@@ -20,9 +20,9 @@ Everything here was **reproduced or read directly in the code** on commit `3d28d
 
 **Fix direction (not done for user messages).** Do for `main.on_message` what `on_reminder` already does: hand the text to `get_response(instance, message=...)` so it is stored under the lock. Or queue messages (planned in #21).
 
-### 2. Unauthenticated access and cost
+### 2. No spend cap, and every allowed user can change the model
 
-No chat allow-list and no per-user permissions anywhere. Anyone who finds the bot (or is in a group that has it) can use it, run `/model opus-5.5-max` (about 40 times the per-token price of the default, and `max` effort uses a lot of reasoning tokens), and toggle `/autoroute`. There is also no spend cap in the program (planned: #14, #31). The only limit is the key limit set in the OpenRouter dashboard. A hostile or curious user can burn it down.
+Only users in `ALLOWED_USER_IDS` can use the bot (#35, [`access-control.md`](access-control.md)). Among them there are **no per-user permissions**: any of them can run `/model opus-5.5-max` (about 40 times the per-token price of the default, and `max` effort uses a lot of reasoning tokens) and toggle `/autoroute`, `/stfu` and `/schizo` for any chat they are in. There is also no spend cap in the program (planned: #14, #31). The only limit is the key limit set in the OpenRouter dashboard.
 
 ### 3. Server-tool results are not in the history, so the model may deny having used them
 
@@ -34,7 +34,7 @@ No chat allow-list and no per-user permissions anywhere. Anyone who finds the bo
 
 ### 5. Users without usernames are indistinguishable (and one case crashes)
 
-The speaker name in history is the Telegram `username`. It is `None` for users who have none (text becomes `None: hi`), and two such users look identical to the model. A message with `from_user is None` (anonymous group admin) or a reply to a message with no sender raises `AttributeError` in `client.on_message` (verified). Memory is per chat, so facts saved about "alice" in a group are visible to everyone in it.
+The speaker name in history is the Telegram `username`. It is `None` for users who have none (text becomes `None: hi`), and two such users look identical to the model. A reply to a message with no sender raises `AttributeError` in `client.on_message` (verified earlier; still possible, the allow-list does not prevent it). A message with `from_user is None` (anonymous group admin) used to raise the same error; it is now dropped by the access gate before it gets there (shown by a test through PTB's dispatcher). Memory is per chat, so facts saved about "alice" in a group are visible to everyone in it.
 
 ## Surprises (behave as written, but not what you would assume)
 
