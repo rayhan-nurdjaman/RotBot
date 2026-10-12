@@ -26,6 +26,7 @@ If you are an agent or a new contributor, read in this order:
 | **Why can nothing come after the history? Why is the time stamped into messages?** (silent cache failure with server tools) | [`caching-and-server-tools.md`](caching-and-server-tools.md) |
 | How does the agent loop work? What happens on errors, timeouts, odd finish reasons? | [`agent-loop.md`](agent-loop.md) |
 | How do I add or change a tool? What tools exist and what do they return? | [`tools.md`](tools.md) |
+| What can the Zed coding agent do that RotBot cannot yet, and what are the testable requirements for parity (issue #51)? | [`agent-parity.md`](agent-parity.md) |
 | Who can use the bot? Where can the shell tool run? How do I add a friend? | [`access-control.md`](access-control.md) |
 | How do models, efforts, `/model` and `/autoroute` work? What does the OpenRouter request look like? | [`models-and-openrouter.md`](models-and-openrouter.md) |
 | How does `/autoroute` pick a model (Jev)? What is sent to it, what happens when it fails, and what does switching models do to the prompt cache? | [`auto-routing.md`](auto-routing.md) |

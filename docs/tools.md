@@ -91,6 +91,8 @@ There is no `get_time` tool: the model reads the time from the timestamp on each
 
 **Verified:** `tests/test_bash.py` runs real commands (output, exit code, stderr, working directory, no stdin, truncation, binary output, timeout with a child process that must not survive). One live turn on Haiku 5.5 with Telegram faked: asked how many test files there are, it ran a shell command and answered correctly (15). Not tested: a hostile prompt, or behaviour under a group chat.
 
+The gap between these tools and a coding agent's (files, search, delegation, skills, stopping a turn), with testable requirements, is in [`agent-parity.md`](agent-parity.md) (issue #51).
+
 ## Server tools (`web_search`, `web_fetch`)
 
 Declared in `src/tools/native.py` with `registry.server_tool('openrouter:...', description, **parameters)`. They are added to the `tools` list after the function tools (`registry.schemas()`), and **OpenRouter runs them inside the same request**: the model calls them, OpenRouter executes them, and the model continues, all before we get a response. There is no handler in this program, and the call is invisible to the loop (`finish_reason` is `stop`, `tool_calls` is empty, and the `llm_call` log line shows no tool name).
