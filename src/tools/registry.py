@@ -36,7 +36,11 @@ class Registry:
 	# property as required. Use Annotated[type, Field(description=...)] to describe an argument.
 	# The function's docstring becomes the tool description. The handler returns a dict, which is sent to the
 	# model as {'ok': True, ...}. Raise ToolError for expected failures.
-	def tool(self, fn):
+	# Use as @tool, or as @tool(timeout=seconds) for a tool that may run longer than the loop's default limit
+	# (config tool_timeout_s). It must then stop itself sooner, so that it reports the stop instead of being cut off.
+	def tool(self, fn=None, *, timeout=None):
+		if fn is None:
+			return lambda fn: self.tool(fn, timeout=timeout)
 		name = fn.__name__
 		if name in self._tools:
 			raise ValueError(f'Tool \'{name}\' is already registered.')
@@ -63,6 +67,7 @@ class Registry:
 
 		self._tools[name] = {
 			'handler': fn,
+			'timeout': timeout,
 			'model': model,
 			'description': description,
 			'schema': {
@@ -97,6 +102,11 @@ class Registry:
 			lines = '\n'.join(f'- {line}' for line in tool['description'].splitlines() if line.strip())
 			entries.append(f'{number}. {name}\n{lines}')
 		return '\n'.join(entries)
+
+	# The loop's time limit for this tool in seconds, or None when it uses the default.
+	def timeout(self, name):
+		tool = self._tools.get(name)
+		return tool['timeout'] if tool else None
 
 	# Never raises for a bad call. Unknown tools and bad arguments are returned to the model as {'ok': False, ...}.
 	# Unexpected exceptions from a handler propagate, so the caller can log them with a traceback.

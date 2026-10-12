@@ -257,6 +257,30 @@ def test_slow_tool_times_out_and_the_model_gets_an_error(instance, monkeypatch):
     assert 'timed out' in json.loads(instance.context_window[1]['content'])['error']
 
 
+def test_a_tool_with_its_own_limit_is_not_cut_off_at_the_default(instance, monkeypatch):
+    async def slow(name, arguments, ctx):
+        await asyncio.sleep(0.05)
+        return {'ok': True}
+
+    monkeypatch.setattr(Assistant, 'tool_timeout', 0.01)
+    monkeypatch.setattr(Assistant.registry, 'timeout', lambda name: 5)
+    install(monkeypatch, FakeLLM([tool_calls_response(tool_call('a')), final_response('done')]), slow)
+
+    assert asyncio.run(Assistant.get_response(instance)) == 'done'
+    assert json.loads(instance.context_window[1]['content']) == {'ok': True}
+
+
+def test_a_tool_with_its_own_limit_is_cut_off_at_that_limit(instance, monkeypatch):
+    async def hang(name, arguments, ctx):
+        await asyncio.sleep(10)
+
+    monkeypatch.setattr(Assistant.registry, 'timeout', lambda name: 0.01)
+    install(monkeypatch, FakeLLM([tool_calls_response(tool_call('a')), final_response('moved on')]), hang)
+
+    assert asyncio.run(Assistant.get_response(instance)) == 'moved on'
+    assert 'timed out after 0.01 seconds' in json.loads(instance.context_window[1]['content'])['error']
+
+
 def test_one_slow_tool_does_not_block_the_others_from_returning(instance, monkeypatch):
     async def tool(name, arguments, ctx):
         if arguments['slow']:

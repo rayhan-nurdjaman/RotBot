@@ -85,9 +85,9 @@ Status key: **have** (in RotBot), **partly**, **missing**. "Beyond me" means I d
 
 | ID | Requirement | Me | RotBot | Issue |
 |---|---|---|---|---|
-| **X1** | `bash` takes a **working directory** argument, validated to be inside the workspace, instead of always running in the bot's own directory. | `terminal` (`cd`) | missing | #51 |
-| **X2** | `bash` takes a **timeout** argument up to a configured maximum, and the 30 s tool timeout in `assistant.py` is aware of it (today the tool and loop limits are 20 s and 30 s). | `timeout_ms` | fixed 20 s | #51 |
-| **X3** | The caller can ask for the **head or the tail** of the output. Today only the first 8,000 characters come back, which hides the end of a build or test log, the part that matters. | `head_lines`, `tail_lines` | head only | none |
+| **X1** | `bash` takes a **working directory** argument, validated to be inside the workspace, instead of always running in the bot's own directory. | `terminal` (`cd`) | **have** (2026-10-12: `cwd`, checked against `workspace_root`; no deny list yet, see decision 1) | #51 |
+| **X2** | `bash` takes a **timeout** argument up to a configured maximum, and the 30 s tool timeout in `assistant.py` is aware of it. | `timeout_ms` | **have** (2026-10-12: `timeout_seconds`, default 20, maximum `bash_max_timeout_s` = 120; the loop honours a per-tool limit set with `@tool(timeout=...)`) | #51 |
+| **X3** | The caller can ask for the **head or the tail** of the output. | `head_lines`, `tail_lines` | **have** (2026-10-12: `keep: "start"` or `"end"`, in characters, not lines; the first and last 8,000 are all it can return) | #51 |
 | **X4** | State between calls is documented and deliberate. A fresh shell per call is what I have, and it is acceptable if the model is told. If instead state persists, working directory and environment must be defined. | fresh shell per call | fresh shell per call | #51 lists "kept between calls" |
 | **X5** | **Background processes** with output polling and kill. | not available | missing | #51. **Beyond me.** |
 | **X6** | A command can be refused before it runs, and a refused command tells the model so. | editor approval prompts | missing | #43 |
@@ -193,10 +193,16 @@ The alternative the owner suggested, holding the lock for the whole wait and let
 - **The press runs a model turn**, so the daily spend cap applies and `Usage.CapReached` must be handled the way `on_reminder` does (tell the user plainly).
 - **The same buttons are reused** for every write tool (F2 to F4), with the command replaced by a short description of the change.
 
-**Open, needs the owner**
+**Decided on 2026-10-12 (second round)**
 
-- **What "approve for the day" covers.** The owner chose this button but not its reach. Interpretation 1: **every** command in this chat until midnight, which is a blanket approval that switches the safeguard off for the day. Interpretation 2: only this **exact command text** until midnight. Interpretation 3: this command *and* the other tools of the same kind. *Recommendation:* interpretation 2 as the default, because 1 removes the protection against a command steered by a web page or a photo, which is the reason approval exists (#43). Not built until chosen.
+- **"Approve for the day" approves every command in that chat until local midnight.** The owner is the only user for now. **This is a serious security weakness** (it removes the protection against a command steered by a web page or a photo for the rest of the day, and `bash` is unsandboxed) and it is **tracked as issue #56, to be fixed before anyone else uses the bot.** The recommended narrowing was to approve only the exact command text; the owner chose the blanket version for now.
+- **Parallel `bash` calls: one approval message for all of them, with the same three buttons.** The model that called several tools at once meant them as a set, and allowing only some would break that intent; asking one at a time would also let the order change. **Consequences to handle when it is built:** (a) the approval covers *every* pending command in that step, so "deny" denies all; (b) other tools called in the same step (reminders, memory) are not commands and would normally run at once, which breaks the "all or nothing" idea, so the design must decide whether the whole step waits (the safe reading: no tool in the step runs until the buttons are pressed, so the step is atomic) *(inferred; not yet decided, to be settled when building)*; (c) the message must show every command, cut for display.
+- **Pending approvals and day approvals live in memory**, so a restart forgets them. A press on an old message says the request is no longer valid.
+
+**Open**
+
 - Whether the expiry should be longer when the owner is away (it is a setting, so this is only a default).
+- How to make a step atomic when the model calls `bash` and another tool together (see above).
 
 ### Deferred by the owner
 
@@ -207,8 +213,8 @@ The alternative the owner suggested, holding the lock for the whole wait and let
 
 Same spirit as #51, with the gaps found here added and the 2026-10-12 decisions applied. Each step is independently reviewable and ends with a check.
 
-1. **Settle the one open point of the approval design** (what "approve for the day" covers, section 5a). Nothing is built.
-2. **X3, X1, X2** (head and tail, working directory, timeout). Small changes to `bash`. Check: a test that a 12,000-character log returns its last lines when asked, and that a `cd` outside the root or into the deny list is refused.
+1. ~~Settle the open points of the approval design~~ (settled 2026-10-12, section 5a; the weakness of "approve for the day" is tracked in #56).
+2. ~~**X3, X1, X2** (head and tail, working directory, timeout).~~ **Done 2026-10-12.** The deny list part of X1 is not built: it belongs with F5 and the file tools.
 3. **Approval buttons** for `bash` (X6, G2, option A of #43), since every later write tool reuses them. Check: tests with a stand-in bot for the message, the id and the stored command, a press by an allowed and by a not-allowed user, an expired request; then a manual try on real Telegram by the owner.
 4. **S1, S2, F1, F4 read side** (`glob`, `grep`, `read_file`, `list_directory`), read-only. Check: temp-directory tests for the size bound, paging, the root and the deny list.
 5. **F2, F3, F4 write side** (`write_file`, exact `edit_file`, create, move, copy, delete), all behind the buttons. Check: tests for exactly-once, all-or-nothing, nearest-line errors and no escape from the root.

@@ -215,3 +215,20 @@ def test_system_prompt_lists_every_registered_tool():
     assert native_registry.prompt_section() in prompt
     for name in ('save_memory', 'recall_memory', 'forget_memory', 'set_reminder', 'list_reminders', 'cancel_reminder', 'bash', 'web_search', 'web_fetch'):
         assert name in prompt
+
+
+def test_tool_accepts_a_timeout_and_reports_it(registry):
+    @registry.tool(timeout=90)
+    async def slow(ctx):
+        """Doc."""
+        return {}
+
+    @registry.tool
+    async def quick(ctx):
+        """Doc."""
+        return {}
+
+    assert registry.timeout('slow') == 90
+    assert registry.timeout('quick') is None
+    assert registry.timeout('nope') is None
+    assert [s['function']['name'] for s in registry.schemas()] == ['slow', 'quick']

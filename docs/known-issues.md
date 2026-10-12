@@ -6,6 +6,9 @@ Everything here was **reproduced or read directly in the code** on commit `3d28d
 
 - **The `bash` tool has no sandbox.** The model can run commands as the bot's user, and the bot's environment contains the OpenRouter and Telegram keys. The owner accepted this on 2026-10-12. Two things now limit who can reach it (#35, see [`access-control.md`](access-control.md)): only user ids in `ALLOWED_USER_IDS` can use the bot at all, and the tool only runs in chats listed in `OP_CHAT_IDS`. Anyone who is allowed **in an op chat** still has a shell with your keys, and so does anything the model is tricked into doing there. Details and the limits on the tool itself are in [`tools.md`](tools.md#bash-a-shell-with-no-sandbox-added-by-the-owners-decision-2026-10-12).
 
+- **"Approve for the day" (not built yet) will approve every bash command in a chat until midnight.** By the owner's decision of 2026-10-12, because he is the only user for now. It switches off the protection that approval gives against prompt injection and must be narrowed before anyone else uses the bot: issue #56, design in [`agent-parity.md`](agent-parity.md) section 5a.
+- **`workspace_root` and `bash`'s `cwd` are not a sandbox.** `cwd` only chooses the folder a command starts in. The command can leave it, and read `.env`, which sits inside the default root `~`.
+
 ## Bugs (wrong behaviour today)
 
 ### 1. Two quick messages in one chat make the second reply fail (fixed, #32)

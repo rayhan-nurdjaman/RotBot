@@ -99,10 +99,11 @@ async def _process_tool_call(instance, tool_call):
 	try:
 		logger.info(f'{tool_name} tool called.')
 		ctx = ToolContext(instance=instance, client=Client)
-		tool_response = await asyncio.wait_for(registry.call(tool_name, tool_arguments, ctx), tool_timeout)
+		limit = registry.timeout(tool_name) or tool_timeout
+		tool_response = await asyncio.wait_for(registry.call(tool_name, tool_arguments, ctx), limit)
 	except asyncio.TimeoutError:
-		logger.error(f'{tool_name} tool timed out after {tool_timeout}s.')
-		tool_response = {'ok': False, 'error': f'The tool timed out after {tool_timeout} seconds.'}
+		logger.error(f'{tool_name} tool timed out after {limit}s.')
+		tool_response = {'ok': False, 'error': f'The tool timed out after {limit} seconds.'}
 	except Exception as e:
 		logger.exception(f'{tool_name} tool failed.')
 		tool_response = {'ok': False, 'error': f'{type(e).__name__}: {e}'}
