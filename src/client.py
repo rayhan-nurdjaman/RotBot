@@ -4,6 +4,7 @@ import telegram
 import telegram.ext
 
 import access as Access
+import approvals as Approvals
 
 import io
 import os
@@ -32,6 +33,7 @@ list_memories_callback				= None
 forget_memory_callback				= None
 show_help_callback					= None
 show_usage_callback					= None
+on_approval_callback				= None
 
 async def _handle_image(update, context):
 	# Telegram lists the sizes of a photo from smallest to largest. Take the largest, assistant.encode_image caps it.
@@ -97,6 +99,45 @@ async def send_message(chat_id, message, message_id=None):
 				chat_id=chat_id,
 				text=chunk,
 			)
+
+# The approval message (issue #43): plain text, so a command can never be misread as formatting, with three buttons.
+# 'Approve this time' and 'Deny' share a row, 'Approve for the day' has its own so it is harder to hit by mistake.
+# Returns the id of the message, which close_approval_request needs. A failure propagates: the caller must treat
+# 'could not ask' as 'not approved'.
+async def send_approval_request(chat_id, text, request_id):
+	keyboard = telegram.InlineKeyboardMarkup([
+		[
+			telegram.InlineKeyboardButton('Approve this time', callback_data=Approvals.callback_data(request_id, Approvals.ONCE)),
+			telegram.InlineKeyboardButton('Deny', callback_data=Approvals.callback_data(request_id, Approvals.DENY)),
+		],
+		[telegram.InlineKeyboardButton('Approve for the day', callback_data=Approvals.callback_data(request_id, Approvals.DAY))],
+	])
+	message = await application.bot.send_message(chat_id=chat_id, text=text[:MESSAGE_LIMIT], reply_markup=keyboard)
+	return message.message_id
+
+# Replaces the approval message with its outcome. Editing without a reply_markup removes the buttons (that is how
+# Telegram's editMessageText works; not tried against the real service by this project's tests). A failure is only
+# logged: if the buttons stay, a press finds no request and says so.
+async def close_approval_request(chat_id, message_id, text):
+	try:
+		await application.bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=text[:MESSAGE_LIMIT])
+	except telegram.error.TelegramError:
+		logger.warning(f'Could not update the approval message {message_id} in chat {chat_id}.', exc_info=True)
+
+# A press on one of the approval buttons. It has already passed the gate (an allowed user). A request that is gone
+# (answered, expired, restarted) or that belongs to another chat gets a short notice and nothing else happens.
+# The spinner on the button is stopped before any model turn starts, because that can take a while.
+async def approval_pressed(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAULT_TYPE) -> None:
+	query = update.callback_query
+	parsed = Approvals.parse_callback_data(query.data)
+	chat = update.effective_chat
+	pending = Approvals.peek(parsed[0]) if parsed else None
+	if pending is None or chat is None or pending.chat_id != chat.id:
+		logger.info(f'Ignored a press on an approval button that is not valid: chat {chat.id if chat else None}, user {update.effective_user.id}.')
+		await query.answer('This request is no longer valid.')
+		return
+	await query.answer()
+	await on_approval_callback(chat.id, update.effective_user, parsed[0], parsed[1])
 
 async def send_client_message(chat_id, message, message_id=None):
 	await send_message(chat_id, f'_{message}_')
@@ -207,6 +248,7 @@ async def gate(update: telegram.Update, context: telegram.ext.ContextTypes.DEFAU
 	raise telegram.ext.ApplicationHandlerStop
 
 application.add_handler(telegram.ext.TypeHandler(telegram.Update, gate), group=-1)
+application.add_handler(telegram.ext.CallbackQueryHandler(approval_pressed, pattern=f'^{Approvals.PREFIX}:'))
 application.add_handler(telegram.ext.CommandHandler('help', help))
 application.add_handler(telegram.ext.CommandHandler('stfu', toggle_always_on))
 application.add_handler(telegram.ext.CommandHandler('model', model))
